@@ -59,13 +59,13 @@ say("Hello");          // Argument: "Hello"
 
 ```
 ┌────────────────────────────────────────────────┐
-│  1. You write: call_me(3)                      │
+│  1. You write: call_me(something a number)     │
 │                                                │
 │  2. Rust sees: fn call_me(num: u8)             │
 │                                                │
-│  3. Rust assigns: num = 3                      │
+│  3. Rust assigns: num = into a number          │
 │                                                │
-│  4. Function runs with num = 3                 │
+│  4. Function runs with num = into a number     │
 └────────────────────────────────────────────────┘
 ```
 
@@ -111,7 +111,7 @@ call_me();
 │  2. What type should that argument be?         │
 │     (Look at the parameter: num: u8)           │
 │                                                │
-│  3. What value would make sense for "number   │
+│  3. What value would make sense for "number    │
 │     of times to ring"?                         │
 └────────────────────────────────────────────────┘
 ```
@@ -158,8 +158,8 @@ double("five"); // ERROR: expected i32, got &str
 ```
 ┌────────────────────────────────────────────────┐
 │  • Parameters define what a function expects   │
-│  • Arguments provide actual values            │
-│  • Count and types must match!                │
+│  • Arguments provide actual values             │
+│  • Count and types must match!                 │
 └────────────────────────────────────────────────┘
 ```
 

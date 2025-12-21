@@ -3,7 +3,7 @@
 ## The Problem
 
 ```
-fn sale_price(price: i64) -> {  // <-- Missing!
+fn sale_price(price: i64) -> ? {  // <-- Missing!
     if is_even(price) {
         price - 10
     } else {
@@ -118,7 +118,7 @@ What type is `price`? It's `i64`!
 │  2. What type is being returned?               │
 │     (Hint: look at the price parameter)        │
 │                                                │
-│  3. What type should go between `->` and `{`? │
+│  3. What type should go between `->` and `{`?  │
 └────────────────────────────────────────────────┘
 ```
 
@@ -163,7 +163,7 @@ fn say_hello() -> () {  // Same thing, explicit
 │  • Arrow `->` indicates a return type          │
 │  • Type goes between `->` and `{`              │
 │  • Type must match what's actually returned    │
-│  • No arrow = returns () (unit)               │
+│  • No arrow = returns () (unit)                │
 └────────────────────────────────────────────────┘
 ```
 

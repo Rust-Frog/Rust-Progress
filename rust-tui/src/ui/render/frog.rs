@@ -185,12 +185,10 @@ fn render_markdown(text: &str) -> Vec<Line<'static>> {
             continue;
         }
 
-        // Inside code block - render as code
+        // Inside code block - render with syntax highlighting
         if in_code_block {
-            lines.push(Line::from(vec![Span::styled(
-                format!("  {}", line),
-                Style::default().fg(theme::colors::STRING),
-            )]));
+            let highlighted = highlight_rust_line(line);
+            lines.push(Line::from(highlighted));
             continue;
         }
 
@@ -294,4 +292,154 @@ fn render_inline_formatting(text: &str) -> String {
     // For now, just strip ** markers for bold (can't easily style inline in ratatui)
     // and keep `code` as-is
     text.replace("**", "").to_string()
+}
+
+/// Basic Rust syntax highlighting for code blocks
+fn highlight_rust_line(line: &str) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+
+    // Add leading indent
+    spans.push(Span::raw("  ".to_string()));
+
+    // Check for comment first (entire line is comment)
+    let trimmed = line.trim_start();
+    if trimmed.starts_with("//") {
+        spans.push(Span::styled(
+            line.to_string(),
+            Style::default().fg(theme::colors::TEXT_DIM),
+        ));
+        return spans;
+    }
+
+    // Simple tokenizer
+    let mut chars = line.chars().peekable();
+    let mut current_token = String::new();
+
+    while let Some(c) = chars.next() {
+        match c {
+            // String literals
+            '"' => {
+                // Flush current token
+                if !current_token.is_empty() {
+                    spans.push(style_token(&current_token));
+                    current_token.clear();
+                }
+                // Collect string
+                let mut string = String::from('"');
+                loop {
+                    match chars.next() {
+                        Some('\\') => {
+                            string.push('\\');
+                            if let Some(escaped) = chars.next() {
+                                string.push(escaped);
+                            }
+                        }
+                        Some('"') => {
+                            string.push('"');
+                            break;
+                        }
+                        Some(ch) => string.push(ch),
+                        None => break,
+                    }
+                }
+                spans.push(Span::styled(
+                    string,
+                    Style::default().fg(theme::colors::STRING),
+                ));
+            }
+            // Punctuation and operators
+            '(' | ')' | '{' | '}' | '[' | ']' | ';' | ':' | ',' | '.' | '+' | '-' | '*' | '/'
+            | '=' | '<' | '>' | '!' | '&' | '|' | '^' | '?' => {
+                // Flush current token
+                if !current_token.is_empty() {
+                    spans.push(style_token(&current_token));
+                    current_token.clear();
+                }
+                // Check for -> arrow
+                if c == '-' && chars.peek() == Some(&'>') {
+                    chars.next();
+                    spans.push(Span::styled(
+                        "->".to_string(),
+                        Style::default().fg(theme::colors::PRIMARY),
+                    ));
+                } else {
+                    spans.push(Span::styled(
+                        c.to_string(),
+                        Style::default().fg(theme::colors::TEXT),
+                    ));
+                }
+            }
+            // Whitespace
+            ' ' | '\t' => {
+                if !current_token.is_empty() {
+                    spans.push(style_token(&current_token));
+                    current_token.clear();
+                }
+                spans.push(Span::raw(c.to_string()));
+            }
+            // Part of identifier/number
+            _ => {
+                current_token.push(c);
+            }
+        }
+    }
+
+    // Flush remaining token
+    if !current_token.is_empty() {
+        spans.push(style_token(&current_token));
+    }
+
+    spans
+}
+
+/// Style a token based on whether it's a keyword, type, or identifier
+fn style_token(token: &str) -> Span<'static> {
+    // Rust keywords
+    const KEYWORDS: &[&str] = &[
+        "fn", "let", "mut", "const", "if", "else", "match", "loop", "while", "for", "in", "return",
+        "break", "continue", "struct", "enum", "impl", "trait", "pub", "mod", "use", "self",
+        "Self", "super", "crate", "where", "async", "await", "move", "ref", "static", "type",
+        "unsafe", "extern", "dyn", "as",
+    ];
+
+    // Rust types
+    const TYPES: &[&str] = &[
+        "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize",
+        "f32", "f64", "bool", "char", "str", "String", "Vec", "Option", "Result", "Box", "Rc",
+        "Arc", "Ok", "Err", "Some", "None", "true", "false",
+    ];
+
+    if KEYWORDS.contains(&token) {
+        Span::styled(
+            token.to_string(),
+            Style::default()
+                .fg(theme::colors::PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        )
+    } else if TYPES.contains(&token) {
+        Span::styled(
+            token.to_string(),
+            Style::default().fg(theme::colors::ACCENT),
+        )
+    } else if token
+        .chars()
+        .next()
+        .map(|c| c.is_ascii_digit())
+        .unwrap_or(false)
+    {
+        // Numbers
+        Span::styled(
+            token.to_string(),
+            Style::default().fg(theme::colors::WARNING),
+        )
+    } else if token.starts_with(char::is_uppercase) {
+        // Types (PascalCase)
+        Span::styled(
+            token.to_string(),
+            Style::default().fg(theme::colors::ACCENT),
+        )
+    } else {
+        // Regular identifier
+        Span::styled(token.to_string(), Style::default().fg(theme::colors::TEXT))
+    }
 }
