@@ -18,7 +18,7 @@ use std::{
 
 use crate::{
     app_state::AppState,
-    exercise::{RunnableExercise, OUTPUT_CAPACITY},
+    exercise::{OUTPUT_CAPACITY, RunnableExercise},
     ui::{layout, theme},
 };
 
@@ -229,10 +229,7 @@ impl<'a> TuiState<'a> {
                 self.last_file_modified = Some(current);
                 let content = fs::read_to_string(&self.file_path)?;
                 self.editor = TextEditor::new(&content);
-                self.output = format!(
-                    "{} File changed externally, reloaded!",
-                    theme::icons::INFO
-                );
+                self.output = format!("{} File changed externally, reloaded!", theme::icons::INFO);
 
                 // Auto-compile if enabled
                 if self.auto_compile_on_change {
@@ -347,13 +344,21 @@ impl<'a> TuiState<'a> {
                     if let Ok(content) = fs::read_to_string(&solution_path) {
                         self.solution_content = Some(content);
                         self.view_mode = ViewMode::WithSolution;
-                        self.output = format!("{} Solution loaded: {}", theme::icons::SOLUTION, solution_path);
+                        self.output = format!(
+                            "{} Solution loaded: {}",
+                            theme::icons::SOLUTION,
+                            solution_path
+                        );
                     } else {
-                        self.output = format!("{} Could not read solution file", theme::icons::ERROR);
+                        self.output =
+                            format!("{} Could not read solution file", theme::icons::ERROR);
                     }
                 }
                 Ok(None) => {
-                    self.output = format!("{} No solution available for this exercise", theme::icons::ERROR);
+                    self.output = format!(
+                        "{} No solution available for this exercise",
+                        theme::icons::ERROR
+                    );
                 }
                 Err(e) => {
                     self.output = format!("{} Error loading solution: {}", theme::icons::ERROR, e);
@@ -442,8 +447,16 @@ impl<'a> TuiState<'a> {
             }
             "watch" => {
                 self.auto_compile_on_change = !self.auto_compile_on_change;
-                let status = if self.auto_compile_on_change { "ON" } else { "OFF" };
-                self.output = format!("{} Auto-compile on file change: {}", theme::icons::DONE, status);
+                let status = if self.auto_compile_on_change {
+                    "ON"
+                } else {
+                    "OFF"
+                };
+                self.output = format!(
+                    "{} Auto-compile on file change: {}",
+                    theme::icons::DONE,
+                    status
+                );
                 Ok(Some(false))
             }
             "r" | "reload" => {
@@ -462,7 +475,11 @@ impl<'a> TuiState<'a> {
                 Ok(Some(false))
             }
             _ => {
-                self.output = format!("{} Unknown command: {} (try :help)", theme::icons::ERROR, cmd);
+                self.output = format!(
+                    "{} Unknown command: {} (try :help)",
+                    theme::icons::ERROR,
+                    cmd
+                );
                 Ok(Some(false))
             }
         }
@@ -789,7 +806,11 @@ fn render_footer(frame: &mut Frame, area: Rect, state: &TuiState) {
 
     // Show scroll position if scrolled
     let scroll_indicator = if scroll_pos > 0 {
-        format!(" Output [{}/{}] ", scroll_pos + visible_height.min(total_lines), total_lines)
+        format!(
+            " Output [{}/{}] ",
+            scroll_pos + visible_height.min(total_lines),
+            total_lines
+        )
     } else {
         " Output ".to_string()
     };
@@ -822,8 +843,8 @@ fn render_footer(frame: &mut Frame, area: Rect, state: &TuiState) {
     // Sinusoidal pulse for smooth brightness transition
     let brightness = ((pulse_phase * std::f32::consts::PI * 2.0).sin() + 1.0) / 2.0; // 0.0 to 1.0
     let r = 255;
-    let g = (80.0 + brightness * 100.0) as u8;  // 80-180
-    let b = (30.0 + brightness * 80.0) as u8;   // 30-110
+    let g = (80.0 + brightness * 100.0) as u8; // 80-180
+    let b = (30.0 + brightness * 80.0) as u8; // 30-110
     let ball_color = Color::Rgb(r, g, b);
 
     let filled = if total > 0 {
@@ -851,9 +872,7 @@ fn render_footer(frame: &mut Frame, area: Rect, state: &TuiState) {
     // The pulsing ball
     spans.push(Span::styled(
         "●",
-        Style::default()
-            .fg(ball_color)
-            .add_modifier(Modifier::BOLD),
+        Style::default().fg(ball_color).add_modifier(Modifier::BOLD),
     ));
 
     // Empty portion (remaining) - gray
@@ -867,8 +886,11 @@ fn render_footer(frame: &mut Frame, area: Rect, state: &TuiState) {
     // Percentage indicator
     spans.push(Span::styled(
         percent_str,
-        Style::default()
-            .fg(if percent == 100 { theme::colors::SUCCESS } else { theme::colors::TEXT_DIM }),
+        Style::default().fg(if percent == 100 {
+            theme::colors::SUCCESS
+        } else {
+            theme::colors::TEXT_DIM
+        }),
     ));
 
     let progress_line = Line::from(spans);
@@ -932,15 +954,9 @@ fn handle_normal_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Opti
             Ok(None)
         }
         KeyCode::Char('q') => Ok(Some(true)),
-        KeyCode::Char('h') | KeyCode::Left => {
-            state.editor.move_left();
-            Ok(None)
-        }
-        KeyCode::Char('j') | KeyCode::Down => {
-            state.editor.move_down();
-            Ok(None)
-        }
-        KeyCode::Char('k') | KeyCode::Up => {
+        KeyCode::Char('k') | KeyCode::Up
+            if !key.modifiers.contains(event::KeyModifiers::CONTROL) =>
+        {
             state.editor.move_up();
             Ok(None)
         }
@@ -949,12 +965,20 @@ fn handle_normal_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Opti
             Ok(None)
         }
         // Scroll output with Shift+J/K, Ctrl+j/k, or PageUp/PageDown
-        KeyCode::Char('J') | KeyCode::PageDown => {
+        KeyCode::Char('J') => {
             state.output_scroll = state.output_scroll.saturating_add(1);
             Ok(None)
         }
-        KeyCode::Char('K') | KeyCode::PageUp => {
+        KeyCode::Char('K') => {
             state.output_scroll = state.output_scroll.saturating_sub(1);
+            Ok(None)
+        }
+        KeyCode::PageDown => {
+            state.output_scroll = state.output_scroll.saturating_add(10); // Approximation
+            Ok(None)
+        }
+        KeyCode::PageUp => {
+            state.output_scroll = state.output_scroll.saturating_sub(10);
             Ok(None)
         }
         KeyCode::Home => {
@@ -973,6 +997,14 @@ fn handle_normal_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Opti
         }
         KeyCode::Up if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
             state.output_scroll = state.output_scroll.saturating_sub(1);
+            Ok(None)
+        }
+        KeyCode::Down => {
+            state.editor.move_down();
+            Ok(None)
+        }
+        KeyCode::Up => {
+            state.editor.move_up();
             Ok(None)
         }
         KeyCode::Char('x') => {
@@ -1108,4 +1140,28 @@ pub fn run_tui(app_state: &mut AppState) -> Result<()> {
         DisableMouseCapture
     )?;
     Ok(())
+}
+
+fn strip_ansi_codes(s: &str) -> String {
+    let mut clean = String::with_capacity(s.len());
+    let mut in_escape = false;
+    let mut chars = s.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            in_escape = true;
+            if let Some('[') = chars.peek() {
+                chars.next();
+            }
+            continue;
+        }
+        if in_escape {
+            if c.is_ascii_alphabetic() || c == '@' {
+                in_escape = false;
+            }
+            continue;
+        }
+        clean.push(c);
+    }
+    clean
 }
