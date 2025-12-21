@@ -80,6 +80,10 @@ pub struct TuiState<'a> {
     pub current_frog_steps: Vec<String>,
     /// Vertical scroll offset within current Frog slide
     pub frog_scroll: usize,
+    /// Total content height (lines) for current frog slide (set by renderer)
+    pub frog_content_height: usize,
+    /// Visible height for frog content area (set by renderer)
+    pub frog_visible_height: usize,
 }
 
 impl<'a> TuiState<'a> {
@@ -116,6 +120,8 @@ impl<'a> TuiState<'a> {
             frog_step: 0,
             current_frog_steps: frog_steps,
             frog_scroll: 0,
+            frog_content_height: 0,
+            frog_visible_height: 0,
         })
     }
 
@@ -422,6 +428,21 @@ impl<'a> TuiState<'a> {
     }
 
     pub fn next_frog_step(&mut self) {
+        // Check if content overflows and we haven't scrolled to bottom
+        let max_scroll = if self.frog_content_height > self.frog_visible_height {
+            self.frog_content_height
+                .saturating_sub(self.frog_visible_height)
+        } else {
+            0
+        };
+
+        // If content overflows and not at bottom, scroll down instead
+        if max_scroll > 0 && self.frog_scroll < max_scroll {
+            self.frog_scroll = max_scroll; // Jump to bottom
+            return;
+        }
+
+        // Only advance if at bottom (or no overflow)
         if self.frog_step < self.current_frog_steps.len().saturating_sub(1) {
             self.frog_step += 1;
             self.frog_scroll = 0; // Reset scroll when changing slides

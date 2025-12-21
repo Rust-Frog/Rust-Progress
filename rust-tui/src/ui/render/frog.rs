@@ -3,7 +3,7 @@ use crate::ui::tui::TuiState;
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 
-pub fn render_frog_panel(frame: &mut Frame, area: Rect, state: &TuiState) {
+pub fn render_frog_panel(frame: &mut Frame, area: Rect, state: &mut TuiState) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -64,14 +64,110 @@ pub fn render_frog_panel(frame: &mut Frame, area: Rect, state: &TuiState) {
     );
     frame.render_widget(step_bar, chunks[0]);
 
-    // 2. Render Current Step Content
+    // 2. Render Current Step Content with scroll tracking
     if let Some(content_str) = state.current_frog_steps.get(state.frog_step) {
         let content_lines = render_markdown(content_str);
+        let total_lines = content_lines.len();
+        let visible_height = chunks[1].height as usize;
+
+        // Calculate max scroll (prevent scrolling past content)
+        let max_scroll = if total_lines > visible_height {
+            total_lines.saturating_sub(visible_height)
+        } else {
+            0
+        };
+
+        // Clamp frog_scroll to valid range
+        if state.frog_scroll > max_scroll {
+            state.frog_scroll = max_scroll;
+        }
+
+        // Update state with scroll info for next_frog_step logic
+        state.frog_content_height = total_lines;
+        state.frog_visible_height = visible_height;
+
         let content = Paragraph::new(content_lines)
             .style(Style::default().fg(theme::colors::TEXT))
             .wrap(Wrap { trim: false })
             .scroll((state.frog_scroll as u16, 0));
-        frame.render_widget(content, chunks[1]);
+
+        // Reserve space for scroll indicator if needed
+        let content_area = if total_lines > visible_height {
+            Rect {
+                x: chunks[1].x,
+                y: chunks[1].y,
+                width: chunks[1].width.saturating_sub(2),
+                height: chunks[1].height,
+            }
+        } else {
+            chunks[1]
+        };
+
+        frame.render_widget(content, content_area);
+
+        // 3. Render scroll indicator if content overflows
+        if total_lines > visible_height {
+            let can_scroll_up = state.frog_scroll > 0;
+            let can_scroll_down = state.frog_scroll < max_scroll;
+
+            // Show scroll position indicator on the right
+            let indicator_x = chunks[1].x + chunks[1].width - 1;
+
+            // Top indicator (if can scroll up)
+            if can_scroll_up {
+                frame.render_widget(
+                    Paragraph::new("▲").style(Style::default().fg(theme::colors::ACCENT)),
+                    Rect {
+                        x: indicator_x,
+                        y: chunks[1].y,
+                        width: 1,
+                        height: 1,
+                    },
+                );
+            }
+
+            // Bottom indicator (if can scroll down)
+            if can_scroll_down {
+                frame.render_widget(
+                    Paragraph::new("▼").style(Style::default().fg(theme::colors::ACCENT)),
+                    Rect {
+                        x: indicator_x,
+                        y: chunks[1].y + chunks[1].height - 1,
+                        width: 1,
+                        height: 1,
+                    },
+                );
+            }
+
+            // Show scrollbar in the middle
+            let scrollbar_height = chunks[1].height.saturating_sub(2);
+            if scrollbar_height > 0 {
+                let scroll_progress = if max_scroll > 0 {
+                    state.frog_scroll as f64 / max_scroll as f64
+                } else {
+                    0.0
+                };
+                let thumb_pos = (scroll_progress * (scrollbar_height as f64 - 1.0)) as u16;
+
+                for i in 0..scrollbar_height {
+                    let char = if i == thumb_pos { "█" } else { "░" };
+                    let color = if i == thumb_pos {
+                        theme::colors::ACCENT
+                    } else {
+                        theme::colors::BG_LIGHT
+                    };
+                    frame.render_widget(
+                        Paragraph::new(char).style(Style::default().fg(color)),
+                        Rect {
+                            x: indicator_x,
+                            y: chunks[1].y + 1 + i,
+                            width: 1,
+                            height: 1,
+                        },
+                    );
+                }
+            }
+        }
     }
 }
 
