@@ -4,6 +4,7 @@
 
 use anyhow::Result;
 use crossterm::{
+    cursor::{Hide, Show},
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
@@ -954,27 +955,38 @@ fn handle_normal_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Opti
             Ok(None)
         }
         KeyCode::Char('q') => Ok(Some(true)),
-        KeyCode::Char('k') | KeyCode::Up
-            if !key.modifiers.contains(event::KeyModifiers::CONTROL) =>
-        {
+        // Editor navigation - only when NO modifiers (to avoid stealing Ctrl+Up/Down)
+        KeyCode::Char('h') | KeyCode::Left if key.modifiers.is_empty() => {
+            state.editor.move_left();
+            Ok(None)
+        }
+        KeyCode::Char('j') | KeyCode::Down if key.modifiers.is_empty() => {
+            state.editor.move_down();
+            Ok(None)
+        }
+        KeyCode::Char('k') | KeyCode::Up if key.modifiers.is_empty() => {
             state.editor.move_up();
             Ok(None)
         }
-        KeyCode::Char('l') | KeyCode::Right => {
+        KeyCode::Char('l') | KeyCode::Right if key.modifiers.is_empty() => {
             state.editor.move_right();
             Ok(None)
         }
-        // Scroll output with Shift+J/K, Ctrl+j/k, or PageUp/PageDown
-        KeyCode::Char('J') => {
+        // Scroll output with Shift+J/K, Ctrl+Down/Up, or PageUp/PageDown
+        KeyCode::Char('J') | KeyCode::Down
+            if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
+        {
             state.output_scroll = state.output_scroll.saturating_add(1);
             Ok(None)
         }
-        KeyCode::Char('K') => {
+        KeyCode::Char('K') | KeyCode::Up
+            if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
+        {
             state.output_scroll = state.output_scroll.saturating_sub(1);
             Ok(None)
         }
         KeyCode::PageDown => {
-            state.output_scroll = state.output_scroll.saturating_add(10); // Approximation
+            state.output_scroll = state.output_scroll.saturating_add(10);
             Ok(None)
         }
         KeyCode::PageUp => {
@@ -997,14 +1009,6 @@ fn handle_normal_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Opti
         }
         KeyCode::Up if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
             state.output_scroll = state.output_scroll.saturating_sub(1);
-            Ok(None)
-        }
-        KeyCode::Down => {
-            state.editor.move_down();
-            Ok(None)
-        }
-        KeyCode::Up => {
-            state.editor.move_up();
             Ok(None)
         }
         KeyCode::Char('x') => {
@@ -1092,7 +1096,7 @@ fn handle_command_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Opt
 pub fn run_tui(app_state: &mut AppState) -> Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture, Hide)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -1137,7 +1141,8 @@ pub fn run_tui(app_state: &mut AppState) -> Result<()> {
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
-        DisableMouseCapture
+        DisableMouseCapture,
+        Show
     )?;
     Ok(())
 }
