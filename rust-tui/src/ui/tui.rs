@@ -74,13 +74,19 @@ pub struct TuiState<'a> {
     /// Frog learning panel visibility
     pub show_frog: bool,
     /// Current step in Frog content (0-indexed)
+    /// Current step in Frog content (0-indexed)
     pub frog_step: usize,
+    /// Loaded Frog content steps
+    pub current_frog_steps: Vec<String>,
+    /// Vertical scroll offset within current Frog slide
+    pub frog_scroll: usize,
 }
 
 impl<'a> TuiState<'a> {
     pub fn new(app_state: &'a mut AppState) -> Result<Self> {
         let exercise = app_state.current_exercise();
         let file_path = exercise.path.to_string();
+        let exercise_name = exercise.name.to_string();
         let content = fs::read_to_string(&file_path)?;
         let editor = TextEditor::new(&content);
         let last_file_modified = Self::get_file_modified_time(&file_path);
@@ -107,7 +113,29 @@ impl<'a> TuiState<'a> {
             visual_start_col: 0,
             show_frog: true,
             frog_step: 0,
+            current_frog_steps: Self::load_frog_content(&exercise_name),
+            frog_scroll: 0,
         })
+    }
+
+    /// Load Frog content for an exercise from markdown file
+    fn load_frog_content(exercise_name: &str) -> Vec<String> {
+        // Try multiple paths to ensure it works whether running from root or rust-tui dir
+        let possible_paths = [
+            format!("rust-tui/frog/{}.md", exercise_name), // From repo root
+            format!("frog/{}.md", exercise_name),          // From rust-tui dir
+        ];
+
+        for path in possible_paths {
+            if let Ok(content) = fs::read_to_string(&path) {
+                return content
+                    .split("--- slide ---")
+                    .map(|s| s.trim().to_string())
+                    .collect();
+            }
+        }
+
+        Vec::new()
     }
 
     /// Get the modification time of a file
@@ -292,6 +320,8 @@ impl<'a> TuiState<'a> {
         self.view_mode = ViewMode::EditorOnly;
         self.last_file_modified = Self::get_file_modified_time(&self.file_path);
         self.output_scroll = 0;
+        self.frog_step = 0;
+        self.current_frog_steps = Self::load_frog_content(exercise.name);
         Ok(())
     }
 
@@ -380,6 +410,31 @@ impl<'a> TuiState<'a> {
                 Ok(Some(false))
             }
         }
+    }
+
+    pub fn next_frog_step(&mut self) {
+        if self.frog_step < self.current_frog_steps.len().saturating_sub(1) {
+            self.frog_step += 1;
+            self.frog_scroll = 0; // Reset scroll when changing slides
+        }
+    }
+
+    pub fn prev_frog_step(&mut self) {
+        if self.frog_step > 0 {
+            self.frog_step -= 1;
+            self.frog_scroll = 0; // Reset scroll when changing slides
+        }
+    }
+
+    pub fn scroll_frog_up(&mut self) {
+        if self.frog_scroll > 0 {
+            self.frog_scroll -= 1;
+        }
+    }
+
+    pub fn scroll_frog_down(&mut self) {
+        // Scroll down (we'll cap it in the renderer based on content height)
+        self.frog_scroll += 1;
     }
 }
 

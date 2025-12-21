@@ -125,17 +125,31 @@ pub fn handle_normal_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<
             state.show_frog = !state.show_frog;
             Ok(None)
         }
-        // Shift+N - Next Frog step
-        KeyCode::Char('N') if key.modifiers.contains(event::KeyModifiers::SHIFT) => {
+        // Shift+Right - Next Frog step
+        KeyCode::Right if key.modifiers.contains(event::KeyModifiers::SHIFT) => {
             if state.show_frog {
-                state.frog_step = state.frog_step.saturating_add(1);
+                state.next_frog_step();
             }
             Ok(None)
         }
-        // Shift+P - Previous Frog step
-        KeyCode::Char('P') if key.modifiers.contains(event::KeyModifiers::SHIFT) => {
+        // Shift+Left - Previous Frog step
+        KeyCode::Left if key.modifiers.contains(event::KeyModifiers::SHIFT) => {
             if state.show_frog {
-                state.frog_step = state.frog_step.saturating_sub(1);
+                state.prev_frog_step();
+            }
+            Ok(None)
+        }
+        // Shift+Down - Scroll Frog content down
+        KeyCode::Down if key.modifiers.contains(event::KeyModifiers::SHIFT) => {
+            if state.show_frog {
+                state.scroll_frog_down();
+            }
+            Ok(None)
+        }
+        // Shift+Up - Scroll Frog content up
+        KeyCode::Up if key.modifiers.contains(event::KeyModifiers::SHIFT) => {
+            if state.show_frog {
+                state.scroll_frog_up();
             }
             Ok(None)
         }
