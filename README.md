@@ -117,8 +117,8 @@ Learn idiomatic Rust with **side-by-side comparisons**.
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/rustlings.git
-cd rustlings
+git clone https://github.com/Rust-Frog/Rust-Progress.git
+cd Rust-Progress
 
 # Install the binary
 cargo install --path . --force
@@ -141,8 +141,8 @@ Designed for **keyboard power users**, friendly for everyone.
 
 | Key | Action |
 | :---: | :--- |
-| `n` | **Next** exercise |
-| `p` | **Previous** exercise |
+| `]` | **Next** exercise |
+| `[` | **Previous** exercise |
 | `Shift+J` / `PgDn` | Scroll output **down** |
 | `Shift+K` / `PgUp` | Scroll output **up** |
 
