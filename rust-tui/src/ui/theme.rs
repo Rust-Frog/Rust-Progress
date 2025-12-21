@@ -19,6 +19,7 @@ pub mod colors {
     pub const BG_MEDIUM: Color = Color::Rgb(40, 42, 54); // Normal background  
     pub const BG_LIGHT: Color = Color::Rgb(68, 71, 90); // Lighter background (panels)
     pub const BG_HIGHLIGHT: Color = Color::Rgb(55, 58, 75); // Selection highlight
+    pub const BACKGROUND: Color = BG_DARK; // Alias for cursor rendering
 
     // Status colors - vibrant and clear
     pub const SUCCESS: Color = Color::Rgb(80, 250, 123); // Bright Green #50FA7B
@@ -134,6 +135,13 @@ pub fn mode_command_style() -> Style {
     Style::default()
         .fg(colors::BG_DARK)
         .bg(colors::ACCENT)
+        .add_modifier(Modifier::BOLD)
+}
+
+pub fn mode_visual_style() -> Style {
+    Style::default()
+        .fg(colors::BG_DARK)
+        .bg(colors::PRIMARY)
         .add_modifier(Modifier::BOLD)
 }
 

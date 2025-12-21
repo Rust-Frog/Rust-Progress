@@ -31,6 +31,8 @@ const FILE_WATCH_POLL_MS: u64 = 500;
 pub enum ViewMode {
     EditorOnly,
     WithSolution,
+    ExpandedOutput,
+    HelpModal,
 }
 
 /// Editor mode (Vim-style)
@@ -39,6 +41,7 @@ pub enum EditorMode {
     Normal,
     Insert,
     Command,
+    Visual,
 }
 
 /// Simple text editor state
@@ -163,6 +166,214 @@ impl TextEditor {
             self.scroll_offset = self.cursor_row - visible_height + 1;
         }
     }
+
+    // === Vim Movement Methods ===
+
+    pub fn move_to_line_start(&mut self) {
+        self.cursor_col = 0;
+    }
+
+    pub fn move_to_line_end(&mut self) {
+        self.cursor_col = self.current_line_len();
+    }
+
+    pub fn move_to_first_non_whitespace(&mut self) {
+        if let Some(line) = self.lines.get(self.cursor_row) {
+            self.cursor_col = line.chars().take_while(|c| c.is_whitespace()).count();
+        }
+    }
+
+    pub fn move_word_forward(&mut self) {
+        if let Some(line) = self.lines.get(self.cursor_row) {
+            let chars: Vec<char> = line.chars().collect();
+            let mut col = self.cursor_col;
+
+            // Skip current word (non-whitespace)
+            while col < chars.len() && !chars[col].is_whitespace() {
+                col += 1;
+            }
+            // Skip whitespace
+            while col < chars.len() && chars[col].is_whitespace() {
+                col += 1;
+            }
+
+            if col >= chars.len() && self.cursor_row < self.lines.len() - 1 {
+                // Move to next line
+                self.cursor_row += 1;
+                self.cursor_col = 0;
+                self.move_to_first_non_whitespace();
+            } else {
+                self.cursor_col = col;
+            }
+        }
+    }
+
+    pub fn move_word_backward(&mut self) {
+        if self.cursor_col == 0 && self.cursor_row > 0 {
+            self.cursor_row -= 1;
+            self.cursor_col = self.current_line_len();
+        }
+
+        if let Some(line) = self.lines.get(self.cursor_row) {
+            let chars: Vec<char> = line.chars().collect();
+            let mut col = self.cursor_col.saturating_sub(1);
+
+            // Skip whitespace backwards
+            while col > 0 && chars.get(col).map_or(false, |c| c.is_whitespace()) {
+                col -= 1;
+            }
+            // Skip word backwards
+            while col > 0 && chars.get(col - 1).map_or(false, |c| !c.is_whitespace()) {
+                col -= 1;
+            }
+
+            self.cursor_col = col;
+        }
+    }
+
+    pub fn goto_first_line(&mut self) {
+        self.cursor_row = 0;
+        self.clamp_col();
+    }
+
+    pub fn goto_last_line(&mut self) {
+        self.cursor_row = self.lines.len().saturating_sub(1);
+        self.clamp_col();
+    }
+
+    // === Vim Editing Methods ===
+
+    pub fn delete_line(&mut self) -> Option<String> {
+        if self.lines.len() > 1 {
+            let deleted = self.lines.remove(self.cursor_row);
+            if self.cursor_row >= self.lines.len() {
+                self.cursor_row = self.lines.len().saturating_sub(1);
+            }
+            self.clamp_col();
+            Some(deleted)
+        } else {
+            // Last line - just clear it
+            let deleted = std::mem::take(&mut self.lines[0]);
+            self.cursor_col = 0;
+            Some(deleted)
+        }
+    }
+
+    pub fn open_line_below(&mut self) {
+        self.lines.insert(self.cursor_row + 1, String::new());
+        self.cursor_row += 1;
+        self.cursor_col = 0;
+    }
+
+    pub fn open_line_above(&mut self) {
+        self.lines.insert(self.cursor_row, String::new());
+        self.cursor_col = 0;
+    }
+
+    pub fn get_current_line(&self) -> Option<&String> {
+        self.lines.get(self.cursor_row)
+    }
+
+    pub fn insert_line_below(&mut self, content: String) {
+        self.lines.insert(self.cursor_row + 1, content);
+    }
+
+    pub fn insert_line_above(&mut self, content: String) {
+        self.lines.insert(self.cursor_row, content);
+    }
+
+    pub fn replace_char(&mut self, c: char) {
+        if let Some(line) = self.lines.get_mut(self.cursor_row) {
+            let mut chars: Vec<char> = line.chars().collect();
+            if self.cursor_col < chars.len() {
+                chars[self.cursor_col] = c;
+                *line = chars.into_iter().collect();
+            }
+        }
+    }
+
+    /// Get the character at the current cursor position (for skip-over logic)
+    pub fn char_at_cursor(&self) -> Option<char> {
+        self.lines
+            .get(self.cursor_row)
+            .and_then(|line| line.chars().nth(self.cursor_col))
+    }
+
+    /// Delete inner word (diw) - just the word, not surrounding spaces
+    pub fn delete_inner_word(&mut self) -> Option<String> {
+        if let Some(line) = self.lines.get(self.cursor_row) {
+            let chars: Vec<char> = line.chars().collect();
+            if chars.is_empty() || self.cursor_col >= chars.len() {
+                return None;
+            }
+
+            // Find word boundaries
+            let mut start = self.cursor_col;
+            let mut end = self.cursor_col;
+
+            // Expand left while we're on word chars
+            while start > 0 && !chars[start - 1].is_whitespace() {
+                start -= 1;
+            }
+            // Expand right while we're on word chars
+            while end < chars.len() && !chars[end].is_whitespace() {
+                end += 1;
+            }
+
+            // Extract and delete
+            let deleted: String = chars[start..end].iter().collect();
+            let new_line: String = chars[..start].iter().chain(chars[end..].iter()).collect();
+            self.lines[self.cursor_row] = new_line;
+            self.cursor_col = start;
+            Some(deleted)
+        } else {
+            None
+        }
+    }
+
+    /// Delete around word (daw) - word plus trailing/leading whitespace
+    pub fn delete_around_word(&mut self) -> Option<String> {
+        if let Some(line) = self.lines.get(self.cursor_row) {
+            let chars: Vec<char> = line.chars().collect();
+            if chars.is_empty() || self.cursor_col >= chars.len() {
+                return None;
+            }
+
+            // Find word boundaries
+            let mut start = self.cursor_col;
+            let mut end = self.cursor_col;
+
+            // Expand left while we're on word chars
+            while start > 0 && !chars[start - 1].is_whitespace() {
+                start -= 1;
+            }
+            // Expand right while we're on word chars
+            while end < chars.len() && !chars[end].is_whitespace() {
+                end += 1;
+            }
+
+            // Also include trailing whitespace (or leading if at end of line)
+            let orig_end = end;
+            while end < chars.len() && chars[end].is_whitespace() {
+                end += 1;
+            }
+            // If no trailing whitespace, try leading
+            if end == orig_end && start > 0 {
+                while start > 0 && chars[start - 1].is_whitespace() {
+                    start -= 1;
+                }
+            }
+
+            // Extract and delete
+            let deleted: String = chars[start..end].iter().collect();
+            let new_line: String = chars[..start].iter().chain(chars[end..].iter()).collect();
+            self.lines[self.cursor_row] = new_line;
+            self.cursor_col = start.min(self.lines[self.cursor_row].len());
+            Some(deleted)
+        } else {
+            None
+        }
+    }
 }
 
 /// Main TUI state
@@ -185,6 +396,17 @@ pub struct TuiState<'a> {
     last_file_modified: Option<SystemTime>,
     /// Auto-compile on external file changes
     auto_compile_on_change: bool,
+    /// Vim yank buffer for copy/paste
+    yank_buffer: Option<String>,
+    /// Pending keys for multi-key commands (dd, yy, daw, ciw, etc.)
+    pending_keys: Vec<char>,
+    /// Visual mode selection start position
+    visual_start_row: usize,
+    visual_start_col: usize,
+    /// Frog learning panel visibility
+    show_frog: bool,
+    /// Current step in Frog content (0-indexed)
+    frog_step: usize,
 }
 
 impl<'a> TuiState<'a> {
@@ -211,6 +433,12 @@ impl<'a> TuiState<'a> {
             auto_advance: true,
             last_file_modified,
             auto_compile_on_change: true,
+            yank_buffer: None,
+            pending_keys: Vec::new(),
+            visual_start_row: 0,
+            visual_start_col: 0,
+            show_frog: true,
+            frog_step: 0,
         })
     }
 
@@ -300,7 +528,7 @@ impl<'a> TuiState<'a> {
                 }
             } else {
                 self.output = format!(
-                    "{} Exercise passed! Press 'n' for next.{}",
+                    "{} Exercise passed! Press ']' for next.{}",
                     theme::icons::DONE,
                     solution_msg
                 );
@@ -472,7 +700,7 @@ impl<'a> TuiState<'a> {
                 Ok(Some(false))
             }
             "help" => {
-                self.output = ":w save | :c compile | :h hint | :n next | :p prev | :s solution | :auto toggle | :watch toggle | :reset | :q quit".to_string();
+                self.view_mode = ViewMode::HelpModal;
                 Ok(Some(false))
             }
             _ => {
@@ -495,12 +723,36 @@ fn render(frame: &mut Frame, state: &mut TuiState) {
 
     match state.view_mode {
         ViewMode::EditorOnly => {
-            render_editor(frame, main, state, true);
+            // Frog is default panel on the right (if enabled)
+            if state.show_frog {
+                let (editor_area, right_panel) = layout::split_editors_layout(main);
+                render_editor(frame, editor_area, state, true);
+                render_frog_panel(frame, right_panel, state);
+            } else {
+                // Full width editor when Frog is off
+                render_editor(frame, main, state, true);
+            }
         }
         ViewMode::WithSolution => {
-            let (editor_area, solution_area) = layout::split_editors_layout(main);
+            // Solution replaces Frog when toggled
+            let (editor_area, right_panel) = layout::split_editors_layout(main);
             render_editor(frame, editor_area, state, true);
-            render_solution(frame, solution_area, state);
+            render_solution(frame, right_panel, state);
+        }
+        ViewMode::ExpandedOutput => {
+            // In expanded mode, output takes the main area, editor is minimized
+            render_expanded_output(frame, main, state);
+        }
+        ViewMode::HelpModal => {
+            // Render editor underneath, then overlay the help modal (in main area only)
+            if state.show_frog {
+                let (editor_area, right_panel) = layout::split_editors_layout(main);
+                render_editor(frame, editor_area, state, true);
+                render_frog_panel(frame, right_panel, state);
+            } else {
+                render_editor(frame, main, state, true);
+            }
+            render_help_modal(frame, main);
         }
     }
 
@@ -622,25 +874,65 @@ fn render_editor(frame: &mut Frame, area: Rect, state: &mut TuiState, is_active:
             let actual_row = state.editor.scroll_offset + i;
             let is_cursor_line = actual_row == state.editor.cursor_row;
 
-            if is_cursor_line && state.mode == EditorMode::Insert {
-                // Show cursor in insert mode
-                let mut spans = Vec::new();
-                let col = state.editor.cursor_col.min(line.len());
+            // Check if this line is in the visual selection
+            let in_visual_mode = state.mode == EditorMode::Visual;
+            let visual_bounds = if in_visual_mode {
+                Some(get_selection_bounds(state))
+            } else {
+                None
+            };
 
+            // Visual mode rendering with selection highlighting
+            if in_visual_mode {
+                render_visual_line(line, actual_row, &visual_bounds, state, is_cursor_line)
+            } else if is_cursor_line
+                && (state.mode == EditorMode::Insert || state.mode == EditorMode::Normal)
+            {
+                // Use different cursor colors for different modes
+                let cursor_color = if state.mode == EditorMode::Insert {
+                    theme::colors::SUCCESS // Green for Insert
+                } else {
+                    theme::colors::PRIMARY // Orange for Normal
+                };
+
+                // Use char indices for proper UTF-8 handling
+                let chars: Vec<char> = line.chars().collect();
+                let col = state.editor.cursor_col.min(chars.len());
+
+                let mut spans = Vec::new();
+
+                // Text before cursor
                 if col > 0 {
+                    let before: String = chars[..col].iter().collect();
                     spans.push(Span::styled(
-                        &line[..col],
+                        before,
                         Style::default().fg(theme::colors::TEXT),
                     ));
                 }
-                spans.push(Span::styled(
-                    "█",
-                    Style::default().fg(theme::colors::SUCCESS),
-                ));
-                if col < line.len() {
+
+                // Cursor character (inverted colors)
+                if col < chars.len() {
                     spans.push(Span::styled(
-                        &line[col..],
-                        Style::default().fg(theme::colors::TEXT),
+                        chars[col].to_string(),
+                        Style::default()
+                            .fg(theme::colors::BACKGROUND)
+                            .bg(cursor_color),
+                    ));
+                    // Text after cursor
+                    if col + 1 < chars.len() {
+                        let after: String = chars[col + 1..].iter().collect();
+                        spans.push(Span::styled(
+                            after,
+                            Style::default().fg(theme::colors::TEXT),
+                        ));
+                    }
+                } else {
+                    // At end of line, show a block cursor (space with background)
+                    spans.push(Span::styled(
+                        " ",
+                        Style::default()
+                            .fg(theme::colors::BACKGROUND)
+                            .bg(cursor_color),
                     ));
                 }
                 Line::from(spans)
@@ -775,6 +1067,238 @@ fn render_solution(frame: &mut Frame, area: Rect, state: &TuiState) {
     }
 }
 
+/// Render the Frog learning panel with educational content
+fn render_frog_panel(frame: &mut Frame, area: Rect, state: &TuiState) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme::colors::SUCCESS))
+        .title(Span::styled(
+            " 🐸 Frog ",
+            Style::default()
+                .fg(theme::colors::SUCCESS)
+                .add_modifier(Modifier::BOLD),
+        ));
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    // Get the current exercise name from file path
+    let exercise_name = state.file_path.split('/').last().unwrap_or("unknown");
+
+    // Placeholder content - will be loaded from frog/ folder
+    let content = vec![
+        Line::from(vec![Span::styled(
+            format!("Exercise: {}", exercise_name),
+            Style::default()
+                .fg(theme::colors::TEXT)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "Welcome to the Frog learning panel! 🐸",
+            Style::default().fg(theme::colors::MUTED),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "Content coming soon...",
+            Style::default().fg(theme::colors::MUTED),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            format!("Step: {}/1", state.frog_step + 1),
+            Style::default().fg(theme::colors::PRIMARY),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "Shift+F toggle │ Shift+N/P navigate",
+            Style::default().fg(theme::colors::MUTED),
+        )]),
+    ];
+
+    let frog_widget = Paragraph::new(content).wrap(ratatui::widgets::Wrap { trim: true });
+    frame.render_widget(frog_widget, inner);
+}
+
+fn render_expanded_output(frame: &mut Frame, area: Rect, state: &TuiState) {
+    // Full-screen output view
+    let clean_output = strip_ansi_codes(&state.output);
+    let output_lines: Vec<&str> = clean_output.lines().collect();
+    let total_lines = output_lines.len();
+    let visible_height = area.height.saturating_sub(2) as usize;
+
+    let max_scroll = total_lines.saturating_sub(visible_height);
+    let scroll_pos = (state.output_scroll as usize).min(max_scroll);
+
+    let output_style = if state.output.contains("✓") || state.output.contains("complete") {
+        Style::default().fg(theme::colors::SUCCESS)
+    } else if state.output.contains("error") || state.output.contains("✗") {
+        Style::default().fg(theme::colors::ERROR)
+    } else if state.output.contains("💡") {
+        Style::default().fg(theme::colors::ACCENT)
+    } else {
+        Style::default().fg(theme::colors::TEXT)
+    };
+
+    let scroll_indicator = format!(
+        " Output [{}/{}] ← Press 'o' to collapse ",
+        scroll_pos + visible_height.min(total_lines),
+        total_lines
+    );
+
+    let output_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme::colors::PRIMARY))
+        .title(Span::styled(
+            scroll_indicator,
+            Style::default()
+                .fg(theme::colors::PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        ));
+
+    let output = Paragraph::new(clean_output.as_str())
+        .block(output_block)
+        .style(output_style)
+        .wrap(Wrap { trim: false })
+        .scroll((scroll_pos as u16, 0));
+    frame.render_widget(output, area);
+}
+
+fn render_help_modal(frame: &mut Frame, area: Rect) {
+    // Calculate centered modal area (60% width, 70% height)
+    let modal_width = (area.width * 60 / 100).max(50).min(80);
+    let modal_height = (area.height * 70 / 100).max(20).min(35);
+    let modal_x = area.x + (area.width.saturating_sub(modal_width)) / 2;
+    let modal_y = area.y + (area.height.saturating_sub(modal_height)) / 2;
+    let modal_area = Rect::new(modal_x, modal_y, modal_width, modal_height);
+
+    // Clear the area behind the modal
+    frame.render_widget(Clear, modal_area);
+
+    // Build help content
+    let help_text = vec![
+        Line::from(vec![Span::styled(
+            "   Rustlings TUI Help   ",
+            Style::default()
+                .fg(theme::colors::PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  NAVIGATION",
+            Style::default()
+                .fg(theme::colors::INFO)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![
+            Span::styled("  ]         ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Next exercise"),
+        ]),
+        Line::from(vec![
+            Span::styled("  [         ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Previous exercise"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Shift+J/K ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Scroll output down/up"),
+        ]),
+        Line::from(vec![
+            Span::styled("  PgDn/PgUp ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Fast scroll output"),
+        ]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  EDITING",
+            Style::default()
+                .fg(theme::colors::INFO)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![
+            Span::styled("  i         ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Enter Insert mode"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Esc       ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Return to Normal mode"),
+        ]),
+        Line::from(vec![
+            Span::styled("  h/j/k/l   ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Vim cursor movement"),
+        ]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  COMMANDS",
+            Style::default()
+                .fg(theme::colors::INFO)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![
+            Span::styled("  :w        ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Save file"),
+        ]),
+        Line::from(vec![
+            Span::styled("  :c        ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Compile/check"),
+        ]),
+        Line::from(vec![
+            Span::styled("  :hint / h ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Show hint"),
+        ]),
+        Line::from(vec![
+            Span::styled("  :sol / s  ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Toggle solution view"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Shift+F   ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Toggle 🐸 Frog panel"),
+        ]),
+        Line::from(vec![
+            Span::styled("  o         ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Expand output panel"),
+        ]),
+        Line::from(vec![
+            Span::styled("  :auto     ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Toggle auto-advance"),
+        ]),
+        Line::from(vec![
+            Span::styled("  :watch    ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Toggle auto-compile"),
+        ]),
+        Line::from(vec![
+            Span::styled("  :reset    ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Reset exercise"),
+        ]),
+        Line::from(vec![
+            Span::styled("  :q / q    ", Style::default().fg(theme::colors::ACCENT)),
+            Span::raw("Quit"),
+        ]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Press Esc or any key to close",
+            Style::default().fg(theme::colors::MUTED),
+        )]),
+    ];
+
+    let help_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme::colors::PRIMARY))
+        .title(Span::styled(
+            " 🦀 Help ",
+            Style::default()
+                .fg(theme::colors::PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        ))
+        .title_alignment(Alignment::Center);
+
+    let help_paragraph = Paragraph::new(help_text)
+        .block(help_block)
+        .style(Style::default().fg(theme::colors::TEXT));
+
+    frame.render_widget(help_paragraph, modal_area);
+}
+
 fn render_footer(frame: &mut Frame, area: Rect, state: &TuiState) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -906,12 +1430,13 @@ fn render_footer(frame: &mut Frame, area: Rect, state: &TuiState) {
             format!(" :{} ", state.command_buffer),
             theme::mode_command_style(),
         ),
+        EditorMode::Visual => Span::styled(" VISUAL ", theme::mode_visual_style()),
     };
 
     let keybindings = if state.mode == EditorMode::Command {
         "Enter: run │ Esc: cancel"
     } else {
-        "i: edit │ :c compile │ :h hint │ s: solution │ n/p: nav │ :help │ q: quit"
+        "i: edit │ :c compile │ :h hint │ s: solution │ [/]: nav │ :help │ q: quit"
     };
 
     let status_line = Line::from(vec![
@@ -928,10 +1453,113 @@ fn handle_key(key: event::KeyEvent, state: &mut TuiState) -> Result<Option<bool>
         EditorMode::Normal => handle_normal_mode(key, state),
         EditorMode::Insert => handle_insert_mode(key, state),
         EditorMode::Command => handle_command_mode(key, state),
+        EditorMode::Visual => handle_visual_mode(key, state),
     }
 }
 
 fn handle_normal_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Option<bool>> {
+    // If help modal is open, any key dismisses it
+    if state.view_mode == ViewMode::HelpModal {
+        state.view_mode = ViewMode::EditorOnly;
+        return Ok(None);
+    }
+
+    // Handle pending key sequences (dd, yy, r<char>, daw, diw, caw, ciw)
+    if !state.pending_keys.is_empty() {
+        let pending = state.pending_keys.clone();
+
+        if let KeyCode::Char(c) = key.code {
+            match (pending.as_slice(), c) {
+                // dd - delete line
+                (&['d'], 'd') => {
+                    state.pending_keys.clear();
+                    state.modified = true;
+                    if let Some(line) = state.editor.delete_line() {
+                        state.yank_buffer = Some(line);
+                    }
+                    return Ok(None);
+                }
+                // yy - yank line
+                (&['y'], 'y') => {
+                    state.pending_keys.clear();
+                    if let Some(line) = state.editor.get_current_line() {
+                        state.yank_buffer = Some(line.clone());
+                    }
+                    return Ok(None);
+                }
+                // r<char> - replace char
+                (&['r'], c) => {
+                    state.pending_keys.clear();
+                    state.modified = true;
+                    state.editor.replace_char(c);
+                    return Ok(None);
+                }
+                // d + a/i - start text object delete
+                (&['d'], 'a') | (&['d'], 'i') | (&['c'], 'a') | (&['c'], 'i') => {
+                    state.pending_keys.push(c);
+                    return Ok(None);
+                }
+                // daw - delete around word
+                (&['d', 'a'], 'w') => {
+                    state.pending_keys.clear();
+                    state.modified = true;
+                    if let Some(deleted) = state.editor.delete_around_word() {
+                        state.yank_buffer = Some(deleted);
+                    }
+                    return Ok(None);
+                }
+                // diw - delete inner word
+                (&['d', 'i'], 'w') => {
+                    state.pending_keys.clear();
+                    state.modified = true;
+                    if let Some(deleted) = state.editor.delete_inner_word() {
+                        state.yank_buffer = Some(deleted);
+                    }
+                    return Ok(None);
+                }
+                // caw - change around word
+                (&['c', 'a'], 'w') => {
+                    state.pending_keys.clear();
+                    state.modified = true;
+                    if let Some(deleted) = state.editor.delete_around_word() {
+                        state.yank_buffer = Some(deleted);
+                    }
+                    state.mode = EditorMode::Insert;
+                    return Ok(None);
+                }
+                // ciw - change inner word
+                (&['c', 'i'], 'w') => {
+                    state.pending_keys.clear();
+                    state.modified = true;
+                    if let Some(deleted) = state.editor.delete_inner_word() {
+                        state.yank_buffer = Some(deleted);
+                    }
+                    state.mode = EditorMode::Insert;
+                    return Ok(None);
+                }
+                // c alone starts pending
+                (&['c'], 'c') => {
+                    // cc - change entire line (delete line content, stay on line, insert mode)
+                    state.pending_keys.clear();
+                    state.modified = true;
+                    state.editor.delete_line();
+                    state.editor.insert_line_above(String::new());
+                    state.mode = EditorMode::Insert;
+                    return Ok(None);
+                }
+                _ => {
+                    // Invalid sequence, clear and ignore
+                    state.pending_keys.clear();
+                    return Ok(None);
+                }
+            }
+        } else {
+            // Non-char key while pending, cancel
+            state.pending_keys.clear();
+            return Ok(None);
+        }
+    }
+
     match key.code {
         KeyCode::Char('i') => {
             state.mode = EditorMode::Insert;
@@ -946,16 +1574,146 @@ fn handle_normal_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Opti
             state.toggle_solution();
             Ok(None)
         }
-        KeyCode::Char('n') => {
+        // Ctrl+O - Toggle expanded output view (remapped from 'o')
+        KeyCode::Char('o') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
+            state.view_mode = if state.view_mode == ViewMode::ExpandedOutput {
+                ViewMode::EditorOnly
+            } else {
+                ViewMode::ExpandedOutput
+            };
+            Ok(None)
+        }
+        // Shift+F - Toggle Frog learning panel
+        KeyCode::Char('F') if key.modifiers.contains(event::KeyModifiers::SHIFT) => {
+            state.show_frog = !state.show_frog;
+            Ok(None)
+        }
+        // Shift+N - Next Frog step
+        KeyCode::Char('N') if key.modifiers.contains(event::KeyModifiers::SHIFT) => {
+            if state.show_frog {
+                state.frog_step = state.frog_step.saturating_add(1);
+            }
+            Ok(None)
+        }
+        // Shift+P - Previous Frog step
+        KeyCode::Char('P') if key.modifiers.contains(event::KeyModifiers::SHIFT) => {
+            if state.show_frog {
+                state.frog_step = state.frog_step.saturating_sub(1);
+            }
+            Ok(None)
+        }
+        // === VIM EDITING ===
+        // o - open line below
+        KeyCode::Char('o') => {
+            state.modified = true;
+            state.editor.open_line_below();
+            state.mode = EditorMode::Insert;
+            Ok(None)
+        }
+        // O - open line above
+        KeyCode::Char('O') => {
+            state.modified = true;
+            state.editor.open_line_above();
+            state.mode = EditorMode::Insert;
+            Ok(None)
+        }
+        // A - append at end of line
+        KeyCode::Char('A') => {
+            state.editor.move_to_line_end();
+            state.mode = EditorMode::Insert;
+            Ok(None)
+        }
+        // I - insert at first non-whitespace
+        KeyCode::Char('I') => {
+            state.editor.move_to_first_non_whitespace();
+            state.mode = EditorMode::Insert;
+            Ok(None)
+        }
+        // d - start delete sequence (waiting for second key)
+        KeyCode::Char('d') => {
+            state.pending_keys.push('d');
+            Ok(None)
+        }
+        // y - start yank sequence
+        KeyCode::Char('y') => {
+            state.pending_keys.push('y');
+            Ok(None)
+        }
+        // p - paste below
+        KeyCode::Char('p') => {
+            if let Some(ref content) = state.yank_buffer.clone() {
+                state.modified = true;
+                state.editor.insert_line_below(content.clone());
+                state.editor.move_down();
+            }
+            Ok(None)
+        }
+        // P - paste above
+        KeyCode::Char('P') => {
+            if let Some(ref content) = state.yank_buffer.clone() {
+                state.modified = true;
+                state.editor.insert_line_above(content.clone());
+            }
+            Ok(None)
+        }
+        // x - delete char under cursor
+        KeyCode::Char('x') => {
+            state.modified = true;
+            state.editor.delete();
+            Ok(None)
+        }
+        // r - replace char (next char typed will replace current)
+        KeyCode::Char('r') => {
+            state.pending_keys.push('r');
+            Ok(None)
+        }
+        // c - start change sequence (for cc, ciw, caw)
+        KeyCode::Char('c') => {
+            state.pending_keys.push('c');
+            Ok(None)
+        }
+        // === VIM MOVEMENT ===
+        // w - word forward
+        KeyCode::Char('w') => {
+            state.editor.move_word_forward();
+            Ok(None)
+        }
+        // b - word backward
+        KeyCode::Char('b') => {
+            state.editor.move_word_backward();
+            Ok(None)
+        }
+        // 0 - line start
+        KeyCode::Char('0') => {
+            state.editor.move_to_line_start();
+            Ok(None)
+        }
+        // $ - line end
+        KeyCode::Char('$') => {
+            state.editor.move_to_line_end();
+            Ok(None)
+        }
+        // g - go to first line
+        KeyCode::Char('g') => {
+            state.editor.goto_first_line();
+            Ok(None)
+        }
+        // G - go to last line
+        KeyCode::Char('G') => {
+            state.editor.goto_last_line();
+            Ok(None)
+        }
+        // Navigation - [ for previous, ] for next exercise
+        KeyCode::Char(']') => {
             state.next_exercise()?;
             Ok(None)
         }
-        KeyCode::Char('p') => {
+        KeyCode::Char('[') => {
             state.prev_exercise()?;
             Ok(None)
         }
         KeyCode::Char('q') => Ok(Some(true)),
-        // Editor navigation - only when NO modifiers (to avoid stealing Ctrl+Up/Down)
+        // Editor navigation - only when NO modifiers
         KeyCode::Char('h') | KeyCode::Left if key.modifiers.is_empty() => {
             state.editor.move_left();
             Ok(None)
@@ -972,7 +1730,7 @@ fn handle_normal_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Opti
             state.editor.move_right();
             Ok(None)
         }
-        // Scroll output with Shift+J/K, Ctrl+Down/Up, or PageUp/PageDown
+        // Scroll output
         KeyCode::Char('J') | KeyCode::Down
             if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
         {
@@ -998,11 +1756,9 @@ fn handle_normal_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Opti
             Ok(None)
         }
         KeyCode::End => {
-            // Scroll to bottom (large number, will be clamped by display)
             state.output_scroll = u16::MAX;
             Ok(None)
         }
-        // Also handle Ctrl+Down/Up for scrolling
         KeyCode::Down if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
             state.output_scroll = state.output_scroll.saturating_add(1);
             Ok(None)
@@ -1011,13 +1767,267 @@ fn handle_normal_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Opti
             state.output_scroll = state.output_scroll.saturating_sub(1);
             Ok(None)
         }
-        KeyCode::Char('x') => {
-            state.modified = true;
-            state.editor.delete();
+        // v - Enter Visual mode for text selection
+        KeyCode::Char('v') => {
+            state.mode = EditorMode::Visual;
+            state.visual_start_row = state.editor.cursor_row;
+            state.visual_start_col = state.editor.cursor_col;
             Ok(None)
         }
         _ => Ok(None),
     }
+}
+
+/// Handle Visual mode (text selection with highlighting)
+fn handle_visual_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Option<bool>> {
+    match key.code {
+        // Escape - exit visual mode
+        KeyCode::Esc => {
+            state.mode = EditorMode::Normal;
+            Ok(None)
+        }
+        // Movement keys - extend selection
+        KeyCode::Char('h') | KeyCode::Left => {
+            state.editor.move_left();
+            Ok(None)
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            state.editor.move_down();
+            Ok(None)
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            state.editor.move_up();
+            Ok(None)
+        }
+        KeyCode::Char('l') | KeyCode::Right => {
+            state.editor.move_right();
+            Ok(None)
+        }
+        // Word movement
+        KeyCode::Char('w') => {
+            state.editor.move_word_forward();
+            Ok(None)
+        }
+        KeyCode::Char('b') => {
+            state.editor.move_word_backward();
+            Ok(None)
+        }
+        // Line start/end
+        KeyCode::Char('0') => {
+            state.editor.move_to_line_start();
+            Ok(None)
+        }
+        KeyCode::Char('$') => {
+            state.editor.move_to_line_end();
+            Ok(None)
+        }
+        // y - Yank (copy) selection
+        KeyCode::Char('y') => {
+            let selected_text = get_visual_selection(state);
+            state.yank_buffer = Some(selected_text);
+            state.mode = EditorMode::Normal;
+            Ok(None)
+        }
+        // d - Delete selection
+        KeyCode::Char('d') => {
+            delete_visual_selection(state);
+            state.mode = EditorMode::Normal;
+            Ok(None)
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Get text within the visual selection
+fn get_visual_selection(state: &TuiState) -> String {
+    let (start_row, start_col, end_row, end_col) = get_selection_bounds(state);
+
+    if start_row == end_row {
+        // Single line selection
+        if let Some(line) = state.editor.lines.get(start_row) {
+            let start = start_col.min(line.len());
+            let end = (end_col + 1).min(line.len());
+            return line[start..end].to_string();
+        }
+    } else {
+        // Multi-line selection
+        let mut result = String::new();
+        for row in start_row..=end_row {
+            if let Some(line) = state.editor.lines.get(row) {
+                if row == start_row {
+                    result.push_str(&line[start_col.min(line.len())..]);
+                    result.push('\n');
+                } else if row == end_row {
+                    result.push_str(&line[..(end_col + 1).min(line.len())]);
+                } else {
+                    result.push_str(line);
+                    result.push('\n');
+                }
+            }
+        }
+        return result;
+    }
+    String::new()
+}
+
+/// Delete text within the visual selection
+fn delete_visual_selection(state: &mut TuiState) {
+    let (start_row, start_col, end_row, end_col) = get_selection_bounds(state);
+
+    // Yank before deleting
+    let selected = get_visual_selection(state);
+    state.yank_buffer = Some(selected);
+    state.modified = true;
+
+    if start_row == end_row {
+        // Single line deletion
+        if let Some(line) = state.editor.lines.get_mut(start_row) {
+            let start = start_col.min(line.len());
+            let end = (end_col + 1).min(line.len());
+            line.replace_range(start..end, "");
+        }
+    } else {
+        // Multi-line deletion: keep start of first line, end of last line, remove middle lines
+        let first_part: String = state
+            .editor
+            .lines
+            .get(start_row)
+            .map(|l| l[..start_col.min(l.len())].to_string())
+            .unwrap_or_default();
+        let last_part: String = state
+            .editor
+            .lines
+            .get(end_row)
+            .map(|l| l[(end_col + 1).min(l.len())..].to_string())
+            .unwrap_or_default();
+
+        // Remove lines from start_row+1 to end_row
+        for _ in start_row..end_row {
+            if start_row + 1 < state.editor.lines.len() {
+                state.editor.lines.remove(start_row + 1);
+            }
+        }
+        // Merge first and last parts
+        if let Some(line) = state.editor.lines.get_mut(start_row) {
+            *line = first_part + &last_part;
+        }
+    }
+
+    // Move cursor to start of selection
+    state.editor.cursor_row = start_row;
+    state.editor.cursor_col = start_col;
+}
+
+/// Get normalized selection bounds (start <= end)
+fn get_selection_bounds(state: &TuiState) -> (usize, usize, usize, usize) {
+    let cur_row = state.editor.cursor_row;
+    let cur_col = state.editor.cursor_col;
+    let start_row = state.visual_start_row;
+    let start_col = state.visual_start_col;
+
+    if start_row < cur_row || (start_row == cur_row && start_col <= cur_col) {
+        (start_row, start_col, cur_row, cur_col)
+    } else {
+        (cur_row, cur_col, start_row, start_col)
+    }
+}
+
+/// Render a line with visual selection highlighting
+fn render_visual_line(
+    line: &str,
+    row: usize,
+    bounds: &Option<(usize, usize, usize, usize)>,
+    state: &TuiState,
+    is_cursor_line: bool,
+) -> Line<'static> {
+    let chars: Vec<char> = line.chars().collect();
+    let mut spans = Vec::new();
+
+    // Get selection bounds
+    let (start_row, start_col, end_row, end_col) = bounds.unwrap_or((0, 0, 0, 0));
+
+    // Check if this row is in the selection range
+    if row < start_row || row > end_row {
+        // Not in selection, render normally
+        return highlight_rust_line(line, is_cursor_line);
+    }
+
+    // Determine selection columns for this row
+    let (sel_start, sel_end) = if start_row == end_row {
+        // Single line selection
+        (start_col, end_col + 1)
+    } else if row == start_row {
+        // First line of multi-line selection
+        (start_col, chars.len())
+    } else if row == end_row {
+        // Last line of multi-line selection
+        (0, end_col + 1)
+    } else {
+        // Middle line - fully selected
+        (0, chars.len())
+    };
+
+    let sel_start = sel_start.min(chars.len());
+    let sel_end = sel_end.min(chars.len());
+
+    // Text before selection
+    if sel_start > 0 {
+        let before: String = chars[..sel_start].iter().collect();
+        spans.push(Span::styled(
+            before,
+            Style::default().fg(theme::colors::TEXT),
+        ));
+    }
+
+    // Selected text (highlighted with magenta background)
+    if sel_start < sel_end {
+        let selected: String = chars[sel_start..sel_end].iter().collect();
+        spans.push(Span::styled(
+            selected,
+            Style::default()
+                .fg(theme::colors::BACKGROUND)
+                .bg(theme::colors::PRIMARY), // Orange highlight for selection
+        ));
+    }
+
+    // Cursor at current position in visual mode
+    let cursor_col = state.editor.cursor_col;
+    if is_cursor_line && cursor_col >= sel_end && cursor_col < chars.len() {
+        // Show cursor after selection if visible
+        let cursor_char = chars[cursor_col].to_string();
+        spans.push(Span::styled(
+            cursor_char,
+            Style::default()
+                .fg(theme::colors::BACKGROUND)
+                .bg(theme::colors::SUCCESS), // Green cursor
+        ));
+        if cursor_col + 1 < chars.len() {
+            let after: String = chars[cursor_col + 1..].iter().collect();
+            spans.push(Span::styled(
+                after,
+                Style::default().fg(theme::colors::TEXT),
+            ));
+        }
+    } else if sel_end < chars.len() {
+        // Text after selection
+        let after: String = chars[sel_end..].iter().collect();
+        spans.push(Span::styled(
+            after,
+            Style::default().fg(theme::colors::TEXT),
+        ));
+    }
+
+    // Handle empty line with cursor
+    if chars.is_empty() && is_cursor_line {
+        spans.push(Span::styled(
+            " ",
+            Style::default()
+                .fg(theme::colors::BACKGROUND)
+                .bg(theme::colors::SUCCESS),
+        ));
+    }
+
+    Line::from(spans)
 }
 
 fn handle_insert_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Option<bool>> {
@@ -1027,13 +2037,71 @@ fn handle_insert_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Opti
             Ok(None)
         }
         KeyCode::Char(c) => {
+            // Skip-over: if typing a closing bracket that's already at cursor, just move past it
+            let skip_chars = [')', '}', ']', '"', '\''];
+            if skip_chars.contains(&c) && state.editor.char_at_cursor() == Some(c) {
+                state.editor.move_right();
+                return Ok(None);
+            }
+
             state.modified = true;
-            state.editor.insert_char(c);
+            // Auto-brackets: insert closing pair and move cursor between
+            match c {
+                '(' => {
+                    state.editor.insert_char('(');
+                    state.editor.insert_char(')');
+                    state.editor.move_left();
+                }
+                '{' => {
+                    state.editor.insert_char('{');
+                    state.editor.insert_char('}');
+                    state.editor.move_left();
+                }
+                '[' => {
+                    state.editor.insert_char('[');
+                    state.editor.insert_char(']');
+                    state.editor.move_left();
+                }
+                '"' => {
+                    state.editor.insert_char('"');
+                    state.editor.insert_char('"');
+                    state.editor.move_left();
+                }
+                '\'' => {
+                    state.editor.insert_char('\'');
+                    state.editor.insert_char('\'');
+                    state.editor.move_left();
+                }
+                _ => {
+                    state.editor.insert_char(c);
+                }
+            }
+            Ok(None)
+        }
+        KeyCode::Tab => {
+            state.modified = true;
+            for _ in 0..4 {
+                state.editor.insert_char(' ');
+            }
             Ok(None)
         }
         KeyCode::Enter => {
             state.modified = true;
+            // Auto-indentation similar to VS Code:
+            // 1. Get current indentation
+            let current_indent = if state.editor.cursor_row < state.editor.lines.len() {
+                let line = &state.editor.lines[state.editor.cursor_row];
+                line.chars().take_while(|c| c.is_whitespace()).count()
+            } else {
+                0
+            };
+
             state.editor.insert_newline();
+
+            // 2. Apply indentation to new line
+            for _ in 0..current_indent {
+                state.editor.insert_char(' ');
+            }
             Ok(None)
         }
         KeyCode::Backspace => {
