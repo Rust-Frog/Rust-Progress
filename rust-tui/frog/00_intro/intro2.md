@@ -99,14 +99,14 @@ Let's examine each part of this line:
 │  println!("Hello, world!");                        │
 │           ^^^^^^^^^^^^^^^                          │
 │           │                                        │
-│  └── DETAIL 2: The text in double quotes is a      │
+│      DETAIL 2: The text in double quotes is a      │
 │      STRING LITERAL. This is the text that will    │
 │      be printed to the screen.                     │
 │                                                    │
 │  println!("Hello, world!");                        │
 │                           ^                        │
 │                           │                        │
-│  └── DETAIL 3: The SEMICOLON marks the end of      │
+│      DETAIL 3: The SEMICOLON marks the end of      │
 │      this statement. Most lines of Rust code       │
 │      end with a semicolon.                         │
 │                                                    │
@@ -277,10 +277,10 @@ Before moving on, verify:
 ```
 ┌────────────────────────────────────────────────────┐
 │                                                    │
-│  [ ] Does the string say exactly "Hello world!"?  │
-│  [ ] Is there a semicolon at the end of the line? │
-│  [ ] Does the Output panel show success?          │
-│  [ ] Have you removed "// I AM NOT DONE" comment? │
+│  [ ] Does the string say exactly "Hello world!"?   │
+│  [ ] Is there a semicolon at the end of the line?  │
+│  [ ] Does the Output panel show success?           │
+│  [ ] Have you removed "// I AM NOT DONE" comment?  │
 │                                                    │
 └────────────────────────────────────────────────────┘
 ```

@@ -90,6 +90,7 @@ impl<'a> TuiState<'a> {
         let content = fs::read_to_string(&file_path)?;
         let editor = TextEditor::new(&content);
         let last_file_modified = Self::get_file_modified_time(&file_path);
+        let frog_steps = Self::load_frog_content(&file_path, &exercise_name);
 
         Ok(Self {
             app_state,
@@ -113,17 +114,24 @@ impl<'a> TuiState<'a> {
             visual_start_col: 0,
             show_frog: true,
             frog_step: 0,
-            current_frog_steps: Self::load_frog_content(&exercise_name),
+            current_frog_steps: frog_steps,
             frog_scroll: 0,
         })
     }
 
     /// Load Frog content for an exercise from markdown file
-    fn load_frog_content(exercise_name: &str) -> Vec<String> {
+    fn load_frog_content(exercise_path: &str, exercise_name: &str) -> Vec<String> {
+        // Extract the directory from the exercise path (e.g., "exercises/00_intro/intro1.rs" -> "00_intro")
+        let dir = std::path::Path::new(exercise_path)
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+
         // Try multiple paths to ensure it works whether running from root or rust-tui dir
         let possible_paths = [
-            format!("rust-tui/frog/{}.md", exercise_name), // From repo root
-            format!("frog/{}.md", exercise_name),          // From rust-tui dir
+            format!("rust-tui/frog/{}/{}.md", dir, exercise_name), // From repo root
+            format!("frog/{}/{}.md", dir, exercise_name),          // From rust-tui dir
         ];
 
         for path in possible_paths {
@@ -321,7 +329,8 @@ impl<'a> TuiState<'a> {
         self.last_file_modified = Self::get_file_modified_time(&self.file_path);
         self.output_scroll = 0;
         self.frog_step = 0;
-        self.current_frog_steps = Self::load_frog_content(exercise.name);
+        self.frog_scroll = 0;
+        self.current_frog_steps = Self::load_frog_content(exercise.path, exercise.name);
         Ok(())
     }
 
