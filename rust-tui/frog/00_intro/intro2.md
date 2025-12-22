@@ -95,12 +95,16 @@ This single line does all the work — it prints text to the screen!
 
 
    println!("Hello, world!");
-                           ^
-                           │
-                           └── DETAIL 3: Semicolon
+                            ^
+                            │
+                            └── DETAIL 3: Semicolon
                                Marks the END of this statement.
 ```
 
+
+
+
+-
 --- slide ---
 
 # 🔮 Macros vs Functions

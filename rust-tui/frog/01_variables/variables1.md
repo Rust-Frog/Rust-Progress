@@ -1,164 +1,138 @@
-# The Problem
+# � What Are Variables?
 
+                    A variable is a named container that holds a value.
 
-
-Look at the code in the Editor:
-
-```rust
-fn main() {
-    x = 5;
-    println!("x has the value {x}");
-}
-```
-
-
-
-The error says:
+                    Think of it like a labeled box:
 
 ```
-error: cannot find value `x` in this scope
+                              ┌───────────────┐
+                              │               │
+                              │      42       │  ← The value inside
+                              │               │
+                              └───────────────┘
+                                    age          ← The label (name)
 ```
 
-
-
-This means Rust doesn't know what `x` is.
-
-
-
-You're telling Rust "put 5 in x" but Rust is 
-asking: "What is x? I've never heard of it!"
-
-
-
-You need to INTRODUCE `x` to Rust first.
-
-That's what the `let` keyword does.
-
-
+                    Variables let you:
+                    - Store data to use later
+                    - Give meaningful names to values
+                    - Change values as your program runs
 
 --- slide ---
 
-# What is `let`?
+# 🏷️ Creating Variables in Rust
 
+                    In Rust, you must DECLARE a variable before using it.
 
+                    This tells Rust: "I want to create a new container 
+                    with this name."
 
-`let` is how you CREATE a new variable in Rust.
+## The Declaration Keyword
 
-
-
-Think of it like making a labeled box:
+                    Rust uses a special keyword to create variables.
+                    This keyword means "create a new variable":
 
 ```
-Without let:           With let:
-                       ┌─────────────┐
-   5  → ???            │      5      │
-                       └─────────────┘
-   "Where do I go?"           x
-                       "Now I have a home!"
+                    ─────────── name = value;
+                        ↑
+                    What keyword goes here?
 ```
 
-
-
-The syntax is:
-
-```rust
-let name = value;
-│    │       │
-│    │       └── What you're storing
-│    └────────── What you call it
-└─────────────── "Create a new variable"
-```
-
-
-
-Without `let`, Rust doesn't create anything.
-
-It just sees `x = 5` and asks "what is x?"
-
-
+                    Without this keyword, Rust doesn't know you're 
+                    trying to create something new — it thinks you're 
+                    referring to something that already exists!
 
 --- slide ---
 
-# The Fix
+# � Reading the Error Message
 
+                    Look at the error in the Output panel:
 
-
-Change this line:
-
-```rust
-x = 5;
+```
+                    error[E0425]: cannot find value `x` in this scope
 ```
 
+                    Rust is telling you:
 
-
-To this:
-
-```rust
-let x = 5;
-^^^
-Add this keyword
+```
+                    "I looked everywhere in this scope (the current
+                     code block), but I can't find anything named x!"
 ```
 
+## Why This Happens
 
+                    When you write just `x = 5`, Rust thinks you mean:
+                    "Put 5 into an EXISTING variable called x"
 
-That's it! Just add `let` before `x`.
-
-
-
-The full fixed code:
-
-```rust
-fn main() {
-    let x = 5;
-    println!("x has the value {x}");
-}
-```
-
-
-
-Now Rust knows:
-
-1. Create a variable called `x`
-2. Put `5` inside it
-3. When you see `{x}` in the print, use that value
-
-
+                    But x doesn't exist yet! You never told Rust to 
+                    create it.
 
 --- slide ---
 
-# Why Does This Work?
+# 🧠 The Key Insight
 
-
-
-When you write `let x = 5;`:
-
-
+                    There's a difference between:
 
 ```
-Step 1: Rust creates a "box" in memory
-┌─────────────┐
-│             │
-│             │
-└─────────────┘
+                    CREATING a variable       vs      USING a variable
+                    (declaring it)                    (after it exists)
 
-Step 2: Labels it "x"
-┌─────────────┐
-│             │
-└─────────────┘
-       x
 
-Step 3: Puts 5 inside
-┌─────────────┐
-│      5      │
-└─────────────┘
-       x
-
-Step 4: Now {x} in println! means "get what's in x"
-Output: "x has the value 5"
+                    ┌─────────────┐                   ┌─────────────┐
+                    │   (empty)   │   "Make me!"      │      5      │
+                    └─────────────┘                   └─────────────┘
+                          x                                 x
+                    First time                        Already exists
 ```
 
+                    The first time you use a name, you need to DECLARE 
+                    it. After that, you can refer to it by just its name.
 
+--- slide ---
 
-Without `let`, steps 1-3 never happen.
+# 🔍 Comparing Languages
 
-Rust has no box, no label, nothing to put 5 into.
+                    Different languages handle this differently:
+
+```
+                    Python:       x = 5       (creates automatically)
+                    
+                    JavaScript:   let x = 5   (explicit creation)
+                    
+                    Rust:         ??? x = 5   (explicit creation)
+```
+
+                    Rust is in the "explicit" camp — you must tell it 
+                    when you're creating something new.
+
+## Why Be Explicit?
+
+                    - Catches typos immediately
+                    - Makes code intentions clear
+                    - Prevents accidental variable creation
+                    - Compiler can help you more
+
+--- slide ---
+
+# ✏️ Your Task
+
+                    Look at the code in the Editor panel.
+
+                    The error says Rust "cannot find value x" because 
+                    x was never declared.
+
+## Hints
+
+                    1. What keyword creates a new variable in Rust?
+                    
+                    2. Where should that keyword go in the code?
+                    
+                    3. Look at the error location — which line needs 
+                       to change?
+
+## When You've Fixed It
+
+                    Save with `:w` and look at the Output panel.
+                    
+                    If you see the message print successfully, 
+                    you've got it! Press `]` for the next exercise.
