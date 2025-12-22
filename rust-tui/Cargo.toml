@@ -48,7 +48,6 @@ include = [
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
 crossterm = { version = "0.28", default-features = false, features = ["windows", "events"] }
-notify = "8.0"
 rustlings-macros = { path = "rustlings-macros", version = "=6.5.0" }
 serde_json = "1.0"
 serde.workspace = true
