@@ -40,13 +40,25 @@ impl TextEditor {
         self.lines.join("\n")
     }
 
-    /// Save current state to undo history. Call before any edit operation.
-    pub fn save_snapshot(&mut self) {
-        let snapshot = EditorSnapshot {
+    /// Create a snapshot of current editor state.
+    fn create_snapshot(&self) -> EditorSnapshot {
+        EditorSnapshot {
             lines: self.lines.clone(),
             cursor_row: self.cursor_row,
             cursor_col: self.cursor_col,
-        };
+        }
+    }
+
+    /// Restore editor state from a snapshot.
+    fn restore_snapshot(&mut self, snapshot: EditorSnapshot) {
+        self.lines = snapshot.lines;
+        self.cursor_row = snapshot.cursor_row;
+        self.cursor_col = snapshot.cursor_col;
+    }
+
+    /// Save current state to undo history. Call before any edit operation.
+    pub fn save_snapshot(&mut self) {
+        let snapshot = self.create_snapshot();
         self.undo_stack.push(snapshot);
 
         // Limit history size
@@ -61,17 +73,8 @@ impl TextEditor {
     /// Undo the last edit operation. Returns true if undo was performed.
     pub fn undo(&mut self) -> bool {
         if let Some(snapshot) = self.undo_stack.pop() {
-            // Save current state to redo stack
-            self.redo_stack.push(EditorSnapshot {
-                lines: self.lines.clone(),
-                cursor_row: self.cursor_row,
-                cursor_col: self.cursor_col,
-            });
-
-            // Restore previous state
-            self.lines = snapshot.lines;
-            self.cursor_row = snapshot.cursor_row;
-            self.cursor_col = snapshot.cursor_col;
+            self.redo_stack.push(self.create_snapshot());
+            self.restore_snapshot(snapshot);
             true
         } else {
             false
@@ -81,17 +84,8 @@ impl TextEditor {
     /// Redo the last undone operation. Returns true if redo was performed.
     pub fn redo(&mut self) -> bool {
         if let Some(snapshot) = self.redo_stack.pop() {
-            // Save current state to undo stack
-            self.undo_stack.push(EditorSnapshot {
-                lines: self.lines.clone(),
-                cursor_row: self.cursor_row,
-                cursor_col: self.cursor_col,
-            });
-
-            // Restore redo state
-            self.lines = snapshot.lines;
-            self.cursor_row = snapshot.cursor_row;
-            self.cursor_col = snapshot.cursor_col;
+            self.undo_stack.push(self.create_snapshot());
+            self.restore_snapshot(snapshot);
             true
         } else {
             false
@@ -332,80 +326,69 @@ impl TextEditor {
             .and_then(|line| line.chars().nth(self.cursor_col))
     }
 
+    /// Find the word boundaries (start, end) around the cursor position.
+    fn find_word_boundaries(&self, chars: &[char]) -> (usize, usize) {
+        let mut start = self.cursor_col;
+        let mut end = self.cursor_col;
+
+        // Expand left while we're on word chars
+        while start > 0 && !chars[start - 1].is_whitespace() {
+            start -= 1;
+        }
+        // Expand right while we're on word chars
+        while end < chars.len() && !chars[end].is_whitespace() {
+            end += 1;
+        }
+        (start, end)
+    }
+
+    /// Delete a range from the current line and return the deleted text.
+    fn delete_range(&mut self, chars: &[char], start: usize, end: usize) -> String {
+        let deleted: String = chars[start..end].iter().collect();
+        let new_line: String = chars[..start].iter().chain(chars[end..].iter()).collect();
+        self.lines[self.cursor_row] = new_line;
+        deleted
+    }
+
     /// Delete inner word (diw) - just the word, not surrounding spaces
     pub fn delete_inner_word(&mut self) -> Option<String> {
-        if let Some(line) = self.lines.get(self.cursor_row) {
-            let chars: Vec<char> = line.chars().collect();
-            if chars.is_empty() || self.cursor_col >= chars.len() {
-                return None;
-            }
-
-            // Find word boundaries
-            let mut start = self.cursor_col;
-            let mut end = self.cursor_col;
-
-            // Expand left while we're on word chars
-            while start > 0 && !chars[start - 1].is_whitespace() {
-                start -= 1;
-            }
-            // Expand right while we're on word chars
-            while end < chars.len() && !chars[end].is_whitespace() {
-                end += 1;
-            }
-
-            // Extract and delete
-            let deleted: String = chars[start..end].iter().collect();
-            let new_line: String = chars[..start].iter().chain(chars[end..].iter()).collect();
-            self.lines[self.cursor_row] = new_line;
-            self.cursor_col = start;
-            Some(deleted)
-        } else {
-            None
+        let line = self.lines.get(self.cursor_row)?;
+        let chars: Vec<char> = line.chars().collect();
+        if chars.is_empty() || self.cursor_col >= chars.len() {
+            return None;
         }
+
+        let (start, end) = self.find_word_boundaries(&chars);
+        let deleted = self.delete_range(&chars, start, end);
+        self.cursor_col = start;
+        Some(deleted)
     }
 
     /// Delete around word (daw) - word plus trailing/leading whitespace
     pub fn delete_around_word(&mut self) -> Option<String> {
-        if let Some(line) = self.lines.get(self.cursor_row) {
-            let chars: Vec<char> = line.chars().collect();
-            if chars.is_empty() || self.cursor_col >= chars.len() {
-                return None;
-            }
+        let line = self.lines.get(self.cursor_row)?;
+        let chars: Vec<char> = line.chars().collect();
+        if chars.is_empty() || self.cursor_col >= chars.len() {
+            return None;
+        }
 
-            // Find word boundaries
-            let mut start = self.cursor_col;
-            let mut end = self.cursor_col;
+        let (mut start, mut end) = self.find_word_boundaries(&chars);
 
-            // Expand left while we're on word chars
-            while start > 0 && !chars[start - 1].is_whitespace() {
+        // Also include trailing whitespace (or leading if at end of line)
+        let orig_end = end;
+        while end < chars.len() && chars[end].is_whitespace() {
+            end += 1;
+        }
+        // If no trailing whitespace, try leading
+        if end == orig_end && start > 0 {
+            while start > 0 && chars[start - 1].is_whitespace() {
                 start -= 1;
             }
-            // Expand right while we're on word chars
-            while end < chars.len() && !chars[end].is_whitespace() {
-                end += 1;
-            }
-
-            // Also include trailing whitespace (or leading if at end of line)
-            let orig_end = end;
-            while end < chars.len() && chars[end].is_whitespace() {
-                end += 1;
-            }
-            // If no trailing whitespace, try leading
-            if end == orig_end && start > 0 {
-                while start > 0 && chars[start - 1].is_whitespace() {
-                    start -= 1;
-                }
-            }
-
-            // Extract and delete
-            let deleted: String = chars[start..end].iter().collect();
-            let new_line: String = chars[..start].iter().chain(chars[end..].iter()).collect();
-            self.lines[self.cursor_row] = new_line;
-            self.cursor_col = start.min(self.lines[self.cursor_row].len());
-            Some(deleted)
-        } else {
-            None
         }
+
+        let deleted = self.delete_range(&chars, start, end);
+        self.cursor_col = start.min(self.lines[self.cursor_row].len());
+        Some(deleted)
     }
 
     /// Find the matching bracket for the character at cursor position.
@@ -415,81 +398,125 @@ impl TextEditor {
         let char_at_cursor = self.char_at_cursor()?;
 
         // Define bracket pairs: (open, close, search_forward)
-        let bracket_info = match char_at_cursor {
-            '(' => Some(('(', ')', true)),
-            ')' => Some(('(', ')', false)),
-            '{' => Some(('{', '}', true)),
-            '}' => Some(('{', '}', false)),
-            '[' => Some(('[', ']', true)),
-            ']' => Some(('[', ']', false)),
-            '<' => Some(('<', '>', true)),
-            '>' => Some(('<', '>', false)),
-            _ => None,
-        }?;
-
-        let (open, close, forward) = bracket_info;
-        let mut depth = 1;
+        let (open, close, forward) = match char_at_cursor {
+            '(' => ('(', ')', true),
+            ')' => ('(', ')', false),
+            '{' => ('{', '}', true),
+            '}' => ('{', '}', false),
+            '[' => ('[', ']', true),
+            ']' => ('[', ']', false),
+            '<' => ('<', '>', true),
+            '>' => ('<', '>', false),
+            _ => return None,
+        };
 
         if forward {
-            // Search forward through lines
-            let mut row = self.cursor_row;
-            let mut col = self.cursor_col + 1;
+            self.search_bracket_forward(open, close)
+        } else {
+            self.search_bracket_backward(open, close)
+        }
+    }
 
-            while row < self.lines.len() {
-                let line = &self.lines[row];
-                let chars: Vec<char> = line.chars().collect();
+    /// Search forward through lines for a matching closing bracket.
+    fn search_bracket_forward(&self, open: char, close: char) -> Option<(usize, usize)> {
+        let mut depth = 1;
+        let mut row = self.cursor_row;
+        let mut col = self.cursor_col + 1;
 
-                while col < chars.len() {
-                    let c = chars[col];
-                    if c == open {
-                        depth += 1;
-                    } else if c == close {
-                        depth -= 1;
-                        if depth == 0 {
-                            return Some((row, col));
-                        }
-                    }
-                    col += 1;
+        while row < self.lines.len() {
+            let chars: Vec<char> = self.lines[row].chars().collect();
+            if let Some(result) =
+                Self::scan_line_for_bracket(&chars, col, open, close, &mut depth, true)
+            {
+                return Some((row, result));
+            }
+            row += 1;
+            col = 0;
+        }
+        None
+    }
+
+    /// Adjust bracket depth based on character and return Some(col) if match found.
+    fn adjust_bracket_depth(
+        c: char,
+        open: char,
+        close: char,
+        depth: &mut i32,
+        col: usize,
+    ) -> Option<usize> {
+        match c {
+            ch if ch == open => *depth += 1,
+            ch if ch == close => {
+                *depth -= 1;
+                if *depth == 0 {
+                    return Some(col);
                 }
-                row += 1;
-                col = 0;
+            }
+            _ => {}
+        }
+        None
+    }
+
+    /// Scan a single line for bracket matches in the given direction.
+    fn scan_line_for_bracket(
+        chars: &[char],
+        start_col: usize,
+        open: char,
+        close: char,
+        depth: &mut i32,
+        forward: bool,
+    ) -> Option<usize> {
+        if forward {
+            for (col, &c) in chars.iter().enumerate().skip(start_col) {
+                if let Some(result) = Self::adjust_bracket_depth(c, open, close, depth, col) {
+                    return Some(result);
+                }
             }
         } else {
-            // Search backward through lines
-            let mut row = self.cursor_row as i32;
-            let mut col = self.cursor_col as i32 - 1;
-
-            while row >= 0 {
-                let line = &self.lines[row as usize];
-                let chars: Vec<char> = line.chars().collect();
-
-                if col < 0 {
-                    row -= 1;
-                    if row >= 0 {
-                        col = self.lines[row as usize].chars().count() as i32 - 1;
-                    }
-                    continue;
-                }
-
-                while col >= 0 {
-                    let c = chars[col as usize];
-                    if c == close {
-                        depth += 1;
-                    } else if c == open {
-                        depth -= 1;
-                        if depth == 0 {
-                            return Some((row as usize, col as usize));
-                        }
-                    }
-                    col -= 1;
-                }
-                row -= 1;
-                if row >= 0 {
-                    col = self.lines[row as usize].chars().count() as i32 - 1;
+            for col in (0..=start_col).rev() {
+                // When searching backward, swap open/close for depth tracking
+                if let Some(result) =
+                    Self::adjust_bracket_depth(chars[col], close, open, depth, col)
+                {
+                    return Some(result);
                 }
             }
         }
-
         None
+    }
+
+    /// Search backward through lines for a matching opening bracket.
+    fn search_bracket_backward(&self, open: char, close: char) -> Option<(usize, usize)> {
+        let mut depth = 1;
+        let mut row = self.cursor_row as i32;
+        let mut col = self.cursor_col as i32 - 1;
+
+        while row >= 0 {
+            if col < 0 {
+                row -= 1;
+                col = self.get_line_end_col(row);
+                continue;
+            }
+
+            let chars: Vec<char> = self.lines[row as usize].chars().collect();
+            if let Some(result) =
+                Self::scan_line_for_bracket(&chars, col as usize, open, close, &mut depth, false)
+            {
+                return Some((row as usize, result));
+            }
+
+            row -= 1;
+            col = self.get_line_end_col(row);
+        }
+        None
+    }
+
+    /// Get the last column index for a given row, or -1 if row is invalid.
+    fn get_line_end_col(&self, row: i32) -> i32 {
+        if row >= 0 {
+            self.lines[row as usize].chars().count() as i32 - 1
+        } else {
+            -1
+        }
     }
 }
