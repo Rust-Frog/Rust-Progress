@@ -127,13 +127,11 @@ pub fn run_tui(app_state: &mut AppState) -> Result<()> {
         if event::poll(Duration::from_millis(FILE_WATCH_POLL_MS))? {
             match event::read()? {
                 Event::Key(key) => {
-                    if key.kind == KeyEventKind::Press {
-                        if let Some(should_quit) = handle_key(key, &mut state)? {
-                            if should_quit {
+                    if key.kind == KeyEventKind::Press
+                        && let Some(should_quit) = handle_key(key, &mut state)?
+                            && should_quit {
                                 break;
                             }
-                        }
-                    }
                 }
                 Event::Mouse(mouse) => match mouse.kind {
                     event::MouseEventKind::ScrollDown => {

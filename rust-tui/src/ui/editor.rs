@@ -1,9 +1,22 @@
-/// Simple text editor state
+/// Maximum undo history entries to prevent unbounded memory growth.
+const MAX_UNDO_HISTORY: usize = 100;
+
+/// Snapshot of editor state for undo/redo history.
+#[derive(Clone)]
+struct EditorSnapshot {
+    lines: Vec<String>,
+    cursor_row: usize,
+    cursor_col: usize,
+}
+
+/// Text editor with vim-style editing and undo/redo support.
 pub struct TextEditor {
     pub lines: Vec<String>,
     pub cursor_row: usize,
     pub cursor_col: usize,
     pub scroll_offset: usize,
+    undo_stack: Vec<EditorSnapshot>,
+    redo_stack: Vec<EditorSnapshot>,
 }
 
 impl TextEditor {
@@ -18,11 +31,71 @@ impl TextEditor {
             cursor_row: 0,
             cursor_col: 0,
             scroll_offset: 0,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
         }
     }
 
     pub fn content(&self) -> String {
         self.lines.join("\n")
+    }
+
+    /// Save current state to undo history. Call before any edit operation.
+    pub fn save_snapshot(&mut self) {
+        let snapshot = EditorSnapshot {
+            lines: self.lines.clone(),
+            cursor_row: self.cursor_row,
+            cursor_col: self.cursor_col,
+        };
+        self.undo_stack.push(snapshot);
+
+        // Limit history size
+        if self.undo_stack.len() > MAX_UNDO_HISTORY {
+            self.undo_stack.remove(0);
+        }
+
+        // Clear redo stack on new edit
+        self.redo_stack.clear();
+    }
+
+    /// Undo the last edit operation. Returns true if undo was performed.
+    pub fn undo(&mut self) -> bool {
+        if let Some(snapshot) = self.undo_stack.pop() {
+            // Save current state to redo stack
+            self.redo_stack.push(EditorSnapshot {
+                lines: self.lines.clone(),
+                cursor_row: self.cursor_row,
+                cursor_col: self.cursor_col,
+            });
+
+            // Restore previous state
+            self.lines = snapshot.lines;
+            self.cursor_row = snapshot.cursor_row;
+            self.cursor_col = snapshot.cursor_col;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Redo the last undone operation. Returns true if redo was performed.
+    pub fn redo(&mut self) -> bool {
+        if let Some(snapshot) = self.redo_stack.pop() {
+            // Save current state to undo stack
+            self.undo_stack.push(EditorSnapshot {
+                lines: self.lines.clone(),
+                cursor_row: self.cursor_row,
+                cursor_col: self.cursor_col,
+            });
+
+            // Restore redo state
+            self.lines = snapshot.lines;
+            self.cursor_row = snapshot.cursor_row;
+            self.cursor_col = snapshot.cursor_col;
+            true
+        } else {
+            false
+        }
     }
 
     pub fn move_up(&mut self) {
@@ -183,11 +256,11 @@ impl TextEditor {
             let mut col = self.cursor_col.saturating_sub(1);
 
             // Skip whitespace backwards
-            while col > 0 && chars.get(col).map_or(false, |c| c.is_whitespace()) {
+            while col > 0 && chars.get(col).is_some_and(|c| c.is_whitespace()) {
                 col -= 1;
             }
             // Skip word backwards
-            while col > 0 && chars.get(col - 1).map_or(false, |c| !c.is_whitespace()) {
+            while col > 0 && chars.get(col - 1).is_some_and(|c| !c.is_whitespace()) {
                 col -= 1;
             }
 
@@ -333,5 +406,90 @@ impl TextEditor {
         } else {
             None
         }
+    }
+
+    /// Find the matching bracket for the character at cursor position.
+    /// Returns `(row, col)` of the matching bracket, or None if no bracket at cursor
+    /// or no matching bracket found.
+    pub fn find_matching_bracket(&self) -> Option<(usize, usize)> {
+        let char_at_cursor = self.char_at_cursor()?;
+
+        // Define bracket pairs: (open, close, search_forward)
+        let bracket_info = match char_at_cursor {
+            '(' => Some(('(', ')', true)),
+            ')' => Some(('(', ')', false)),
+            '{' => Some(('{', '}', true)),
+            '}' => Some(('{', '}', false)),
+            '[' => Some(('[', ']', true)),
+            ']' => Some(('[', ']', false)),
+            '<' => Some(('<', '>', true)),
+            '>' => Some(('<', '>', false)),
+            _ => None,
+        }?;
+
+        let (open, close, forward) = bracket_info;
+        let mut depth = 1;
+
+        if forward {
+            // Search forward through lines
+            let mut row = self.cursor_row;
+            let mut col = self.cursor_col + 1;
+
+            while row < self.lines.len() {
+                let line = &self.lines[row];
+                let chars: Vec<char> = line.chars().collect();
+
+                while col < chars.len() {
+                    let c = chars[col];
+                    if c == open {
+                        depth += 1;
+                    } else if c == close {
+                        depth -= 1;
+                        if depth == 0 {
+                            return Some((row, col));
+                        }
+                    }
+                    col += 1;
+                }
+                row += 1;
+                col = 0;
+            }
+        } else {
+            // Search backward through lines
+            let mut row = self.cursor_row as i32;
+            let mut col = self.cursor_col as i32 - 1;
+
+            while row >= 0 {
+                let line = &self.lines[row as usize];
+                let chars: Vec<char> = line.chars().collect();
+
+                if col < 0 {
+                    row -= 1;
+                    if row >= 0 {
+                        col = self.lines[row as usize].chars().count() as i32 - 1;
+                    }
+                    continue;
+                }
+
+                while col >= 0 {
+                    let c = chars[col as usize];
+                    if c == close {
+                        depth += 1;
+                    } else if c == open {
+                        depth -= 1;
+                        if depth == 0 {
+                            return Some((row as usize, col as usize));
+                        }
+                    }
+                    col -= 1;
+                }
+                row -= 1;
+                if row >= 0 {
+                    col = self.lines[row as usize].chars().count() as i32 - 1;
+                }
+            }
+        }
+
+        None
     }
 }

@@ -36,10 +36,10 @@ pub fn render_markdown(text: &str) -> Vec<Line<'static>> {
         }
 
         // H1 header
-        if trimmed.starts_with("# ") {
+        if let Some(header_text) = trimmed.strip_prefix("# ") {
             lines.push(Line::from(""));
             lines.push(Line::from(vec![Span::styled(
-                trimmed[2..].to_string(),
+                header_text.to_string(),
                 Style::default()
                     .fg(theme::colors::ACCENT)
                     .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
@@ -49,9 +49,9 @@ pub fn render_markdown(text: &str) -> Vec<Line<'static>> {
         }
 
         // H2 header
-        if trimmed.starts_with("## ") {
+        if let Some(header_text) = trimmed.strip_prefix("## ") {
             lines.push(Line::from(vec![Span::styled(
-                trimmed[3..].to_string(),
+                header_text.to_string(),
                 Style::default()
                     .fg(theme::colors::PRIMARY)
                     .add_modifier(Modifier::BOLD),
@@ -61,9 +61,9 @@ pub fn render_markdown(text: &str) -> Vec<Line<'static>> {
         }
 
         // H3 header
-        if trimmed.starts_with("### ") {
+        if let Some(header_text) = trimmed.strip_prefix("### ") {
             lines.push(Line::from(vec![Span::styled(
-                trimmed[4..].to_string(),
+                header_text.to_string(),
                 Style::default()
                     .fg(theme::colors::INFO)
                     .add_modifier(Modifier::BOLD),
@@ -88,10 +88,10 @@ pub fn render_markdown(text: &str) -> Vec<Line<'static>> {
         }
 
         // Bullet list
-        if trimmed.starts_with("- ") {
+        if let Some(list_text) = trimmed.strip_prefix("- ") {
             lines.push(Line::from(vec![
                 Span::styled("  • ", Style::default().fg(theme::colors::INFO)),
-                Span::raw(render_inline_formatting(&trimmed[2..])),
+                Span::raw(render_inline_formatting(list_text)),
             ]));
             continue;
         }

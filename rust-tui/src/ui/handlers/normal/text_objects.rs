@@ -12,6 +12,7 @@ pub fn handle_pending_keys(key_char: char, state: &mut TuiState) -> Result<Optio
         (&['d'], 'd') => {
             state.pending_keys.clear();
             state.modified = true;
+            state.editor.save_snapshot();
             if let Some(line) = state.editor.delete_line() {
                 state.yank_buffer = Some(line);
             }
@@ -29,6 +30,7 @@ pub fn handle_pending_keys(key_char: char, state: &mut TuiState) -> Result<Optio
         (&['r'], c) => {
             state.pending_keys.clear();
             state.modified = true;
+            state.editor.save_snapshot();
             state.editor.replace_char(c);
             Ok(None)
         }
@@ -41,6 +43,7 @@ pub fn handle_pending_keys(key_char: char, state: &mut TuiState) -> Result<Optio
         (&['d', 'a'], 'w') => {
             state.pending_keys.clear();
             state.modified = true;
+            state.editor.save_snapshot();
             if let Some(deleted) = state.editor.delete_around_word() {
                 state.yank_buffer = Some(deleted);
             }
@@ -50,6 +53,7 @@ pub fn handle_pending_keys(key_char: char, state: &mut TuiState) -> Result<Optio
         (&['d', 'i'], 'w') => {
             state.pending_keys.clear();
             state.modified = true;
+            state.editor.save_snapshot();
             if let Some(deleted) = state.editor.delete_inner_word() {
                 state.yank_buffer = Some(deleted);
             }
@@ -59,6 +63,7 @@ pub fn handle_pending_keys(key_char: char, state: &mut TuiState) -> Result<Optio
         (&['c', 'a'], 'w') => {
             state.pending_keys.clear();
             state.modified = true;
+            state.editor.save_snapshot();
             if let Some(deleted) = state.editor.delete_around_word() {
                 state.yank_buffer = Some(deleted);
             }
@@ -69,6 +74,7 @@ pub fn handle_pending_keys(key_char: char, state: &mut TuiState) -> Result<Optio
         (&['c', 'i'], 'w') => {
             state.pending_keys.clear();
             state.modified = true;
+            state.editor.save_snapshot();
             if let Some(deleted) = state.editor.delete_inner_word() {
                 state.yank_buffer = Some(deleted);
             }

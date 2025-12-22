@@ -19,24 +19,28 @@ pub fn handle_editing(code: KeyCode, state: &mut TuiState) -> Result<Option<bool
         }
         KeyCode::Char('o') => {
             state.modified = true;
+            state.editor.save_snapshot();
             state.editor.open_line_below();
             state.mode = EditorMode::Insert;
             Ok(None)
         }
         KeyCode::Char('O') => {
             state.modified = true;
+            state.editor.save_snapshot();
             state.editor.open_line_above();
             state.mode = EditorMode::Insert;
             Ok(None)
         }
         KeyCode::Char('x') => {
             state.modified = true;
+            state.editor.save_snapshot();
             state.editor.delete();
             Ok(None)
         }
         KeyCode::Char('p') => {
             if let Some(text) = &state.yank_buffer {
                 state.modified = true;
+                state.editor.save_snapshot();
                 if text.contains('\n') || text.ends_with('\n') {
                     state.editor.insert_line_below(text.trim_end().to_string());
                 } else {

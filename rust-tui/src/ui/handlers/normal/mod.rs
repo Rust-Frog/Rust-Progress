@@ -107,7 +107,13 @@ pub fn handle_normal_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<
             state.pending_keys.push('c');
             Ok(None)
         }
-        KeyCode::Char('u') => Ok(None), // Undo placeholder
+        KeyCode::Char('u') => {
+            // Vim undo
+            if state.editor.undo() {
+                state.modified = true;
+            }
+            Ok(None)
+        }
         KeyCode::Char(']') => {
             state.next_exercise()?;
             Ok(None)
@@ -132,12 +138,27 @@ pub fn handle_normal_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<
 /// Handle Ctrl+key combinations
 fn handle_ctrl_keys(code: KeyCode, state: &mut TuiState) -> Result<Option<bool>> {
     match code {
+        // Ctrl+Z - undo
+        KeyCode::Char('z') => {
+            if state.editor.undo() {
+                state.modified = true;
+            }
+            Ok(None)
+        }
+        // Ctrl+O - toggle expanded output
         KeyCode::Char('o') => {
             state.view_mode = if state.view_mode == ViewMode::ExpandedOutput {
                 ViewMode::EditorOnly
             } else {
                 ViewMode::ExpandedOutput
             };
+            Ok(None)
+        }
+        // Ctrl+Shift+Z - redo (Shift makes it uppercase)
+        KeyCode::Char('Z') => {
+            if state.editor.redo() {
+                state.modified = true;
+            }
             Ok(None)
         }
         _ => Ok(None),

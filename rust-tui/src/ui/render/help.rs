@@ -4,8 +4,8 @@ use ratatui::widgets::*;
 
 pub fn render_help_modal(frame: &mut Frame, area: Rect) {
     // Calculate centered modal area (60% width, 70% height)
-    let modal_width = (area.width * 60 / 100).max(50).min(80);
-    let modal_height = (area.height * 70 / 100).max(20).min(35);
+    let modal_width = (area.width * 60 / 100).clamp(50, 80);
+    let modal_height = (area.height * 70 / 100).clamp(20, 35);
     let modal_x = area.x + (area.width.saturating_sub(modal_width)) / 2;
     let modal_y = area.y + (area.height.saturating_sub(modal_height)) / 2;
     let modal_area = Rect::new(modal_x, modal_y, modal_width, modal_height);

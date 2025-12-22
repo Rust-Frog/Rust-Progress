@@ -1,8 +1,29 @@
 use crate::ui::state::{EditorMode, TuiState};
 use anyhow::Result;
-use crossterm::event::{self, KeyCode};
+use crossterm::event::{self, KeyCode, KeyModifiers};
 
 pub fn handle_insert_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Option<bool>> {
+    // Handle Ctrl+Z (undo) and Ctrl+Shift+Z (redo) in Insert mode
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
+        match key.code {
+            KeyCode::Char('z') => {
+                // Ctrl+Z - undo
+                if state.editor.undo() {
+                    state.modified = true;
+                }
+                return Ok(None);
+            }
+            KeyCode::Char('Z') => {
+                // Ctrl+Shift+Z - redo (Shift makes it uppercase)
+                if state.editor.redo() {
+                    state.modified = true;
+                }
+                return Ok(None);
+            }
+            _ => {}
+        }
+    }
+
     match key.code {
         KeyCode::Esc => {
             state.mode = EditorMode::Normal;
@@ -17,6 +38,7 @@ pub fn handle_insert_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<
             }
 
             state.modified = true;
+            state.editor.save_snapshot();
             // Auto-brackets: insert closing pair and move cursor between
             match c {
                 '(' => {
@@ -52,6 +74,7 @@ pub fn handle_insert_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<
         }
         KeyCode::Tab => {
             state.modified = true;
+            state.editor.save_snapshot();
             for _ in 0..4 {
                 state.editor.insert_char(' ');
             }
@@ -59,6 +82,7 @@ pub fn handle_insert_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<
         }
         KeyCode::Enter => {
             state.modified = true;
+            state.editor.save_snapshot();
             // Auto-indentation similar to VS Code:
             // 1. Get current indentation
             let current_indent = if state.editor.cursor_row < state.editor.lines.len() {
@@ -78,11 +102,13 @@ pub fn handle_insert_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<
         }
         KeyCode::Backspace => {
             state.modified = true;
+            state.editor.save_snapshot();
             state.editor.backspace();
             Ok(None)
         }
         KeyCode::Delete => {
             state.modified = true;
+            state.editor.save_snapshot();
             state.editor.delete();
             Ok(None)
         }

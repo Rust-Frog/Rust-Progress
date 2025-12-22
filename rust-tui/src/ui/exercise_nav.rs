@@ -22,18 +22,19 @@ impl<'a> TuiState<'a> {
     pub fn check_external_file_change(&mut self) -> Result<bool> {
         let current_modified = Self::get_file_modified_time(&self.file_path);
 
-        if let (Some(last), Some(current)) = (self.last_file_modified, current_modified) {
-            if current > last && !self.modified {
-                self.last_file_modified = Some(current);
-                let content = fs::read_to_string(&self.file_path)?;
-                self.editor = TextEditor::new(&content);
-                self.output = format!("{} File changed externally, reloaded!", theme::icons::INFO);
+        if let (Some(last), Some(current)) = (self.last_file_modified, current_modified)
+            && current > last
+            && !self.modified
+        {
+            self.last_file_modified = Some(current);
+            let content = fs::read_to_string(&self.file_path)?;
+            self.editor = TextEditor::new(&content);
+            self.output = format!("{} File changed externally, reloaded!", theme::icons::INFO);
 
-                if self.auto_compile_on_change {
-                    self.compile()?;
-                }
-                return Ok(true);
+            if self.auto_compile_on_change {
+                self.compile()?;
             }
+            return Ok(true);
         }
         self.last_file_modified = current_modified;
         Ok(false)
@@ -55,7 +56,7 @@ impl<'a> TuiState<'a> {
         self.output = format!(
             "{} Checking {}...",
             theme::icons::COMPILING,
-            self.file_path.split('/').last().unwrap_or("file")
+            self.file_path.split('/').next_back().unwrap_or("file")
         );
         self.output_scroll = 0;
 
@@ -82,7 +83,7 @@ impl<'a> TuiState<'a> {
                     self.output = format!(
                         "{} Complete! Auto-advanced to: {}",
                         theme::icons::DONE,
-                        self.file_path.split('/').last().unwrap_or("next")
+                        self.file_path.split('/').next_back().unwrap_or("next")
                     );
                 } else {
                     self.output = format!(
@@ -108,19 +109,17 @@ impl<'a> TuiState<'a> {
     pub fn find_next_pending_exercise(&self) -> Option<usize> {
         let exercises = self.app_state.exercises();
         let current = self.app_state.current_exercise_ind();
-        let len = exercises.len();
 
-        for i in (current + 1)..len {
-            if !exercises[i].done {
-                return Some(i);
-            }
-        }
-        for i in 0..current {
-            if !exercises[i].done {
-                return Some(i);
-            }
-        }
-        None
+        // Search from current+1 to end
+        exercises
+            .iter()
+            .enumerate()
+            .skip(current + 1)
+            .find_map(|(i, ex)| if !ex.done { Some(i) } else { None })
+            .or_else(|| {
+                // Wrap around: search from 0 to current
+                exercises.iter().take(current).position(|ex| !ex.done)
+            })
     }
 
     /// Toggle solution panel visibility

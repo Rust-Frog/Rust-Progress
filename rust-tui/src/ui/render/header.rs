@@ -7,7 +7,7 @@ pub fn render_header(frame: &mut Frame, area: Rect, state: &TuiState) {
     let done = state.app_state.n_done();
     let total = state.app_state.exercises().len();
     let current = state.app_state.current_exercise_ind() + 1;
-    let exercise_name = state.file_path.split('/').last().unwrap_or("unknown");
+    let exercise_name = state.file_path.split('/').next_back().unwrap_or("unknown");
     let modified_indicator = if state.modified { " ●" } else { "" };
 
     let is_done = state.app_state.exercises()[state.app_state.current_exercise_ind()].done;

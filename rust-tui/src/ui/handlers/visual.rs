@@ -105,14 +105,12 @@ pub fn delete_visual_selection(state: &mut TuiState) {
             let end = (end_col + 1).min(line_chars.len());
 
             // Convert char indices back to byte indices for replace_range
-            let mut byte_start = 0;
-            for i in 0..start {
-                byte_start += line_chars[i].len_utf8();
-            }
-            let mut byte_end = byte_start;
-            for i in start..end {
-                byte_end += line_chars[i].len_utf8();
-            }
+            let byte_start: usize = line_chars[..start].iter().map(|c| c.len_utf8()).sum();
+            let byte_end: usize = byte_start
+                + line_chars[start..end]
+                    .iter()
+                    .map(|c| c.len_utf8())
+                    .sum::<usize>();
             line.replace_range(byte_start..byte_end, "");
         }
     } else {

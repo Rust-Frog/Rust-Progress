@@ -53,6 +53,10 @@ pub fn render_editor(frame: &mut Frame, area: Rect, state: &mut TuiState, is_act
     let line_nums_widget = Paragraph::new(visible_lines);
     frame.render_widget(line_nums_widget, editor_chunks[0]);
 
+    // Calculate matching bracket position for highlighting
+    let matching_bracket = state.editor.find_matching_bracket();
+    let _cursor_pos = (state.editor.cursor_row, state.editor.cursor_col);
+
     // Render code with syntax highlighting
     let code_lines: Vec<Line> = state
         .editor
@@ -128,8 +132,19 @@ pub fn render_editor(frame: &mut Frame, area: Rect, state: &mut TuiState, is_act
                 }
                 Line::from(spans)
             } else {
-                // Syntax highlighting
-                highlight_rust_line(line, is_cursor_line)
+                // Check if this line contains matching bracket to highlight
+                if let Some((match_row, match_col)) = matching_bracket {
+                    if actual_row == match_row {
+                        // This line has the matching bracket - render with highlight
+                        render_line_with_bracket_highlight(line, match_col)
+                    } else {
+                        // Syntax highlighting
+                        highlight_rust_line(line, is_cursor_line)
+                    }
+                } else {
+                    // Syntax highlighting
+                    highlight_rust_line(line, is_cursor_line)
+                }
             }
         })
         .collect();
@@ -243,6 +258,52 @@ fn render_visual_line(
             Style::default()
                 .fg(theme::colors::BACKGROUND)
                 .bg(theme::colors::SUCCESS),
+        ));
+    }
+
+    Line::from(spans)
+}
+
+/// Render a line with a specific column highlighted as a matching bracket
+fn render_line_with_bracket_highlight(line: &str, highlight_col: usize) -> Line<'static> {
+    let chars: Vec<char> = line.chars().collect();
+    let mut spans = Vec::new();
+
+    // Bracket highlight style - use a distinct color
+    let bracket_style = Style::default()
+        .fg(theme::colors::BACKGROUND)
+        .bg(theme::colors::WARNING)
+        .add_modifier(Modifier::BOLD);
+
+    if highlight_col < chars.len() {
+        // Text before bracket
+        if highlight_col > 0 {
+            let before: String = chars[..highlight_col].iter().collect();
+            spans.push(Span::styled(
+                before,
+                Style::default().fg(theme::colors::TEXT),
+            ));
+        }
+
+        // Highlighted bracket
+        spans.push(Span::styled(
+            chars[highlight_col].to_string(),
+            bracket_style,
+        ));
+
+        // Text after bracket
+        if highlight_col + 1 < chars.len() {
+            let after: String = chars[highlight_col + 1..].iter().collect();
+            spans.push(Span::styled(
+                after,
+                Style::default().fg(theme::colors::TEXT),
+            ));
+        }
+    } else {
+        // Fallback - just render the whole line
+        spans.push(Span::styled(
+            line.to_string(),
+            Style::default().fg(theme::colors::TEXT),
         ));
     }
 
