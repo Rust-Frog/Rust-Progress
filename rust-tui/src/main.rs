@@ -18,11 +18,9 @@ mod embedded;
 mod exercise;
 mod info_file;
 mod init;
-mod list;
 mod run;
 mod term;
 mod ui;
-mod watch;
 
 const CURRENT_FORMAT_VERSION: u8 = 1;
 
