@@ -1,6 +1,6 @@
 use super::{highlight_rust_line, strip_ansi_codes};
+use crate::ui::state::TuiState;
 use crate::ui::theme;
-use crate::ui::tui::TuiState;
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 

@@ -1,6 +1,6 @@
 use super::highlight_rust_line;
+use crate::ui::state::{EditorMode, TuiState};
 use crate::ui::theme;
-use crate::ui::tui::{EditorMode, TuiState};
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 

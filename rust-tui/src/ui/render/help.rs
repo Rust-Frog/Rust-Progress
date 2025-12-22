@@ -91,7 +91,7 @@ pub fn render_help_modal(frame: &mut Frame, area: Rect) {
             Span::raw("Toggle 🐸 Frog panel"),
         ]),
         Line::from(vec![
-            Span::styled("  o         ", Style::default().fg(theme::colors::ACCENT)),
+            Span::styled("  Ctrl+O    ", Style::default().fg(theme::colors::ACCENT)),
             Span::raw("Expand output panel"),
         ]),
         Line::from(vec![

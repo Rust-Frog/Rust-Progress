@@ -242,10 +242,6 @@ impl TextEditor {
         self.lines.insert(self.cursor_row + 1, content);
     }
 
-    pub fn insert_line_above(&mut self, content: String) {
-        self.lines.insert(self.cursor_row, content);
-    }
-
     pub fn replace_char(&mut self, c: char) {
         if let Some(line) = self.lines.get_mut(self.cursor_row) {
             let mut chars: Vec<char> = line.chars().collect();

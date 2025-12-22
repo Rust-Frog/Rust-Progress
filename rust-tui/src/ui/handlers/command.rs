@@ -1,4 +1,4 @@
-use crate::ui::tui::{EditorMode, TuiState};
+use crate::ui::state::{EditorMode, TuiState};
 use anyhow::Result;
 use crossterm::event::{self, KeyCode};
 

@@ -32,8 +32,6 @@ pub enum ExercisesProgress {
     AllDone,
     // A new exercise is now pending.
     NewPending,
-    // The current exercise is still pending.
-    CurrentPending,
 }
 
 pub enum StateFileStatus {
@@ -349,19 +347,6 @@ impl AppState {
         self.reset(self.current_exercise_ind, exercise.path)?;
 
         Ok(exercise.path)
-    }
-
-    // Reset the exercise by index and return its name.
-    pub fn reset_exercise_by_ind(&mut self, exercise_ind: usize) -> Result<&'static str> {
-        if exercise_ind >= self.exercises.len() {
-            bail!(BAD_INDEX_ERR);
-        }
-
-        self.set_pending(exercise_ind)?;
-        let exercise = &self.exercises[exercise_ind];
-        self.reset(exercise_ind, exercise.path)?;
-
-        Ok(exercise.name)
     }
 
     // Return the index of the next pending exercise or `None` if all exercises are done.

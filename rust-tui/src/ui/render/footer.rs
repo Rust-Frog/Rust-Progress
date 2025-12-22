@@ -1,6 +1,6 @@
 use super::strip_ansi_codes;
+use crate::ui::state::{EditorMode, TuiState};
 use crate::ui::theme;
-use crate::ui::tui::{EditorMode, TuiState};
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 
@@ -64,7 +64,13 @@ pub fn render_footer(frame: &mut Frame, area: Rect, state: &TuiState) {
     // Progress bar with pulsing orange ball
     let done = state.app_state.n_done() as usize;
     let total = state.app_state.exercises().len();
-    let progress_width = chunks[1].width.saturating_sub(10) as usize; // Leave room for percentage
+
+    // Progress percentage
+    let percent = if total > 0 { (done * 100) / total } else { 0 };
+    let percent_str = format!(" {}% ", percent);
+
+    // Calculate exact width: total - leading space (1) - ball (1) - percent label
+    let progress_width = chunks[1].width.saturating_sub(2 + percent_str.len() as u16) as usize;
 
     // Smooth pulsing animation for the ball
     let elapsed_ms = state.start_time.elapsed().as_millis();
@@ -83,10 +89,6 @@ pub fn render_footer(frame: &mut Frame, area: Rect, state: &TuiState) {
         0
     };
     let empty = progress_width.saturating_sub(filled);
-
-    // Progress percentage
-    let percent = if total > 0 { (done * 100) / total } else { 0 };
-    let percent_str = format!(" {}% ", percent);
 
     // Build the clean progress line: [orange━━━●gray━━━] XX%
     let mut spans = vec![Span::styled(" ", Style::default())];

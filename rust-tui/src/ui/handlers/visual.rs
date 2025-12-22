@@ -1,5 +1,5 @@
 use crate::ui::render::editor::get_selection_bounds;
-use crate::ui::tui::{EditorMode, TuiState};
+use crate::ui::state::{EditorMode, TuiState};
 use anyhow::Result;
 use crossterm::event::{self, KeyCode};
 
