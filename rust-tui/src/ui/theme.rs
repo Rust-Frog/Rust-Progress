@@ -2,7 +2,7 @@
 //!
 //! Modern, vibrant Dracula-inspired theme with Rust accents
 
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 
 /// Modern Dracula-inspired color palette with Rust accents
 pub mod colors {

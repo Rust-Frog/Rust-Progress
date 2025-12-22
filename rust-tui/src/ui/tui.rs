@@ -5,12 +5,11 @@
 use anyhow::Result;
 use crossterm::{
     cursor::{Hide, Show},
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind},
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::style::{Color, Modifier, Style};
-use ratatui::{prelude::*, widgets::*};
+use ratatui::prelude::*;
 use std::{
     fs,
     io::stdout,

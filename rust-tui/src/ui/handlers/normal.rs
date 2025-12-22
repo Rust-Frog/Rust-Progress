@@ -187,16 +187,6 @@ pub fn handle_normal_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<
         }
         KeyCode::Char('g') => {
             state.pending_keys.push('g');
-            // Check if gg immediately
-            if state.pending_keys == vec!['g'] {
-                // wait for next key... but if we want to handle 'gg' specifically:
-            }
-            Ok(None)
-        }
-        // Special case for gg
-        KeyCode::Char('g') if state.pending_keys == vec!['g'] => {
-            state.pending_keys.clear();
-            state.editor.goto_first_line();
             Ok(None)
         }
         KeyCode::Char('G') => {

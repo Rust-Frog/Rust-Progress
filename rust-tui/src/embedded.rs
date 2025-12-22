@@ -67,7 +67,7 @@ impl EmbeddedFiles {
 
         fs::write(
             "exercises/README.md",
-            include_bytes!("../exercises/README.md"),
+            include_bytes!("../../exercises/README.md"),
         )
         .context("Failed to write the file exercises/README.md")?;
 

@@ -127,7 +127,7 @@ pub fn init() -> Result<()> {
     create_dir("solutions").context("Failed to create the `solutions/` directory")?;
     fs::write(
         "solutions/README.md",
-        include_bytes!("../solutions/README.md"),
+        include_bytes!("../../solutions/README.md"),
     )
     .context("Failed to create the file rustlings/solutions/README.md")?;
     for dir in EMBEDDED_FILES.exercise_dirs {
