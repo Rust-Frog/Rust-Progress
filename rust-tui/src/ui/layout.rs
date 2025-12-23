@@ -15,6 +15,20 @@ pub fn main_layout(area: Rect) -> (Rect, Rect, Rect) {
     (chunks[0], chunks[1], chunks[2])
 }
 
+/// Layout for expanded output mode - minimal footer (just progress + status)
+pub fn expanded_layout(area: Rect) -> (Rect, Rect, Rect) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // Header
+            Constraint::Min(10),   // Expanded output (takes most of screen)
+            Constraint::Length(2), // Just progress bar + status bar
+        ])
+        .split(area);
+
+    (chunks[0], chunks[1], chunks[2])
+}
+
 /// Split main content for editor + solution mode
 pub fn split_editors_layout(area: Rect) -> (Rect, Rect) {
     let chunks = Layout::default()

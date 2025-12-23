@@ -1,65 +1,79 @@
 use super::strip_ansi_codes;
-use crate::ui::state::{EditorMode, TuiState};
+use crate::ui::state::{EditorMode, TuiState, ViewMode};
 use crate::ui::theme;
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 
 pub fn render_footer(frame: &mut Frame, area: Rect, state: &TuiState) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(3),
-            Constraint::Length(1),
-            Constraint::Length(1),
-        ])
-        .split(area);
+    let is_expanded = state.view_mode == ViewMode::ExpandedOutput;
 
-    // Output panel - strip ANSI codes for clean display
-    let clean_output = strip_ansi_codes(&state.output);
-    let output_lines: Vec<&str> = clean_output.lines().collect();
-    let total_lines = output_lines.len();
-    let visible_height = chunks[0].height.saturating_sub(2) as usize; // Account for borders
-
-    // Clamp scroll to valid range
-    let max_scroll = total_lines.saturating_sub(visible_height);
-    let scroll_pos = (state.output_scroll as usize).min(max_scroll);
-
-    let output_style = if state.output.contains("✓") || state.output.contains("complete") {
-        Style::default().fg(theme::colors::SUCCESS)
-    } else if state.output.contains("error") || state.output.contains("✗") {
-        Style::default().fg(theme::colors::ERROR)
-    } else if state.output.contains("💡") {
-        Style::default().fg(theme::colors::ACCENT)
+    // Use different layout constraints depending on view mode
+    let (chunks, progress_idx, status_idx) = if is_expanded {
+        // Only progress bar and status bar when output is expanded
+        let c = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Length(1)])
+            .split(area);
+        (c, 0, 1)
     } else {
-        Style::default().fg(theme::colors::TEXT)
+        // Full layout with output panel
+        let c = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(3),
+                Constraint::Length(1),
+                Constraint::Length(1),
+            ])
+            .split(area);
+        (c, 1, 2)
     };
 
-    // Show scroll position if scrolled
-    let scroll_indicator = if scroll_pos > 0 {
-        format!(
-            " Output [{}/{}] ",
-            scroll_pos + visible_height.min(total_lines),
-            total_lines
-        )
-    } else {
-        " Output ".to_string()
-    };
+    // Output panel - only render if not in expanded mode
+    if !is_expanded {
+        let clean_output = strip_ansi_codes(&state.output);
+        let output_lines: Vec<&str> = clean_output.lines().collect();
+        let total_lines = output_lines.len();
+        let visible_height = chunks[0].height.saturating_sub(2) as usize;
 
-    let output_block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme::colors::MUTED))
-        .title(Span::styled(
-            scroll_indicator,
-            Style::default().fg(theme::colors::MUTED),
-        ));
+        let max_scroll = total_lines.saturating_sub(visible_height);
+        let scroll_pos = (state.output_scroll as usize).min(max_scroll);
 
-    let output = Paragraph::new(clean_output.as_str())
-        .block(output_block)
-        .style(output_style)
-        .wrap(Wrap { trim: false })
-        .scroll((scroll_pos as u16, 0));
-    frame.render_widget(output, chunks[0]);
+        let output_style = if state.output.contains("✓") || state.output.contains("complete") {
+            Style::default().fg(theme::colors::SUCCESS)
+        } else if state.output.contains("error") || state.output.contains("✗") {
+            Style::default().fg(theme::colors::ERROR)
+        } else if state.output.contains("💡") {
+            Style::default().fg(theme::colors::ACCENT)
+        } else {
+            Style::default().fg(theme::colors::TEXT)
+        };
+
+        let scroll_indicator = if scroll_pos > 0 {
+            format!(
+                " Output [{}/{}] ",
+                scroll_pos + visible_height.min(total_lines),
+                total_lines
+            )
+        } else {
+            " Output ".to_string()
+        };
+
+        let output_block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(theme::colors::MUTED))
+            .title(Span::styled(
+                scroll_indicator,
+                Style::default().fg(theme::colors::MUTED),
+            ));
+
+        let output = Paragraph::new(clean_output.as_str())
+            .block(output_block)
+            .style(output_style)
+            .wrap(Wrap { trim: false })
+            .scroll((scroll_pos as u16, 0));
+        frame.render_widget(output, chunks[0]);
+    }
 
     // Progress bar with pulsing orange ball
     let done = state.app_state.n_done() as usize;
@@ -127,7 +141,7 @@ pub fn render_footer(frame: &mut Frame, area: Rect, state: &TuiState) {
 
     let progress_line = Line::from(spans);
     let progress_bar = Paragraph::new(progress_line);
-    frame.render_widget(progress_bar, chunks[1]);
+    frame.render_widget(progress_bar, chunks[progress_idx]);
 
     // Status bar
     let mode_span = match state.mode {
@@ -152,5 +166,5 @@ pub fn render_footer(frame: &mut Frame, area: Rect, state: &TuiState) {
         Span::styled(keybindings, Style::default().fg(theme::colors::TEXT_DIM)),
     ]);
     let status_bar = Paragraph::new(status_line);
-    frame.render_widget(status_bar, chunks[2]);
+    frame.render_widget(status_bar, chunks[status_idx]);
 }

@@ -1,6 +1,6 @@
 DON'T EDIT THIS FILE!
 
-primitive_types6
+structs1
 
 intro1
 intro2

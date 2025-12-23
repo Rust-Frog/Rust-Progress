@@ -65,7 +65,12 @@ impl<'a> TuiState<'a> {
 }
 
 fn render(frame: &mut Frame, state: &mut TuiState) {
-    let (header, main, footer) = layout::main_layout(frame.area());
+    // Use expanded layout for full-screen output mode
+    let (header, main, footer) = if state.view_mode == ViewMode::ExpandedOutput {
+        layout::expanded_layout(frame.area())
+    } else {
+        layout::main_layout(frame.area())
+    };
 
     render::render_header(frame, header, state);
 
@@ -129,9 +134,10 @@ pub fn run_tui(app_state: &mut AppState) -> Result<()> {
                 Event::Key(key) => {
                     if key.kind == KeyEventKind::Press
                         && let Some(should_quit) = handle_key(key, &mut state)?
-                            && should_quit {
-                                break;
-                            }
+                        && should_quit
+                    {
+                        break;
+                    }
                 }
                 Event::Mouse(mouse) => match mouse.kind {
                     event::MouseEventKind::ScrollDown => {
