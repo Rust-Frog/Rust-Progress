@@ -61,6 +61,69 @@ pub struct AppState {
     emit_file_links: bool,
 }
 
+// Build the canonical path for an exercise (extracted from new() for clarity)
+fn build_canonical_path(
+    dir_canonical_path: Option<&str>,
+    dir: Option<&str>,
+    name: &str,
+) -> Option<String> {
+    dir_canonical_path.map(|base| {
+        let mut path = if let Some(d) = dir {
+            let mut p = String::with_capacity(2 + base.len() + d.len() + name.len());
+            p.push_str(base);
+            p.push_str(MAIN_SEPARATOR_STR);
+            p.push_str(d);
+            p
+        } else {
+            let mut p = String::with_capacity(1 + base.len() + name.len());
+            p.push_str(base);
+            p
+        };
+        path.push_str(MAIN_SEPARATOR_STR);
+        path.push_str(name);
+        path.push_str(".rs");
+        path
+    })
+}
+
+// Parse the state file and update exercises' done status
+fn parse_state_file(
+    state_file: &mut File,
+    file_buf: &mut Vec<u8>,
+    exercises: &mut [Exercise],
+) -> (usize, u16, StateFileStatus) {
+    let mut current_exercise_ind = 0;
+    let mut n_done: u16 = 0;
+
+    if state_file.read_to_end(file_buf).is_err() {
+        return (0, 0, StateFileStatus::NotRead);
+    }
+
+    let mut lines = file_buf.split(|c| *c == b'\n').skip(2);
+
+    let Some(current_exercise_name) = lines.next() else {
+        return (0, 0, StateFileStatus::NotRead);
+    };
+
+    if current_exercise_name.is_empty() || lines.next().is_none() {
+        return (0, 0, StateFileStatus::NotRead);
+    }
+
+    let done_exercises: HashSet<_> = lines.take_while(|name| !name.is_empty()).collect();
+
+    for (ind, exercise) in exercises.iter_mut().enumerate() {
+        if done_exercises.contains(exercise.name.as_bytes()) {
+            exercise.done = true;
+            n_done += 1;
+        }
+        if exercise.name.as_bytes() == current_exercise_name {
+            current_exercise_ind = ind;
+        }
+    }
+
+    (current_exercise_ind, n_done, StateFileStatus::Read)
+}
+
 impl AppState {
     pub fn new(
         exercise_infos: Vec<ExerciseInfo>,
@@ -82,33 +145,11 @@ impl AppState {
             .into_iter()
             .map(|exercise_info| {
                 // Leaking to be able to borrow in the watch mode `Table`.
-                // Leaking is not a problem because the `AppState` instance lives until
-                // the end of the program.
                 let path = exercise_info.path().leak();
                 let name = exercise_info.name.leak();
                 let dir = exercise_info.dir.map(|dir| &*dir.leak());
                 let hint = exercise_info.hint.leak().trim_ascii();
-
-                let canonical_path = dir_canonical_path.as_deref().map(|dir_canonical_path| {
-                    let mut canonical_path;
-                    if let Some(dir) = dir {
-                        canonical_path = String::with_capacity(
-                            2 + dir_canonical_path.len() + dir.len() + name.len(),
-                        );
-                        canonical_path.push_str(dir_canonical_path);
-                        canonical_path.push_str(MAIN_SEPARATOR_STR);
-                        canonical_path.push_str(dir);
-                    } else {
-                        canonical_path =
-                            String::with_capacity(1 + dir_canonical_path.len() + name.len());
-                        canonical_path.push_str(dir_canonical_path);
-                    }
-
-                    canonical_path.push_str(MAIN_SEPARATOR_STR);
-                    canonical_path.push_str(name);
-                    canonical_path.push_str(".rs");
-                    canonical_path
-                });
+                let canonical_path = build_canonical_path(dir_canonical_path.as_deref(), dir, name);
 
                 Exercise {
                     dir,
@@ -118,53 +159,14 @@ impl AppState {
                     test: exercise_info.test,
                     strict_clippy: exercise_info.strict_clippy,
                     hint,
-                    // Updated below.
                     done: false,
                 }
             })
             .collect::<Vec<_>>();
 
-        let mut current_exercise_ind = 0;
-        let mut n_done = 0;
         let mut file_buf = Vec::with_capacity(2048);
-        let state_file_status = 'block: {
-            if state_file.read_to_end(&mut file_buf).is_err() {
-                break 'block StateFileStatus::NotRead;
-            }
-
-            // See `Self::write` for more information about the file format.
-            let mut lines = file_buf.split(|c| *c == b'\n').skip(2);
-
-            let Some(current_exercise_name) = lines.next() else {
-                break 'block StateFileStatus::NotRead;
-            };
-
-            if current_exercise_name.is_empty() || lines.next().is_none() {
-                break 'block StateFileStatus::NotRead;
-            }
-
-            let mut done_exercises = HashSet::with_capacity(exercises.len());
-
-            for done_exercise_name in lines {
-                if done_exercise_name.is_empty() {
-                    break;
-                }
-                done_exercises.insert(done_exercise_name);
-            }
-
-            for (ind, exercise) in exercises.iter_mut().enumerate() {
-                if done_exercises.contains(exercise.name.as_bytes()) {
-                    exercise.done = true;
-                    n_done += 1;
-                }
-
-                if exercise.name.as_bytes() == current_exercise_name {
-                    current_exercise_ind = ind;
-                }
-            }
-
-            StateFileStatus::Read
-        };
+        let (current_exercise_ind, n_done, state_file_status) =
+            parse_state_file(&mut state_file, &mut file_buf, &mut exercises);
 
         file_buf.clear();
         file_buf.extend_from_slice(STATE_FILE_HEADER);
@@ -446,7 +448,21 @@ impl AppState {
             Ok::<_, Error>(())
         })?;
 
-        let mut first_pending_exercise_ind = None;
+        let first_pending =
+            self.process_exercise_results(&mut progresses, &mut progress_visualizer)?;
+
+        self.write()?;
+        Ok(first_pending)
+    }
+
+    // Process results from parallel exercise checking and handle fallbacks
+    fn process_exercise_results(
+        &mut self,
+        progresses: &mut [CheckProgress],
+        visualizer: &mut CheckProgressVisualizer<'_, '_>,
+    ) -> Result<Option<usize>> {
+        let mut first_pending = None;
+
         for exercise_ind in 0..progresses.len() {
             match progresses[exercise_ind] {
                 CheckProgress::Done => {
@@ -454,36 +470,34 @@ impl AppState {
                 }
                 CheckProgress::Pending => {
                     self.set_status(exercise_ind, false)?;
-                    if first_pending_exercise_ind.is_none() {
-                        first_pending_exercise_ind = Some(exercise_ind);
+                    if first_pending.is_none() {
+                        first_pending = Some(exercise_ind);
                     }
                 }
                 CheckProgress::None | CheckProgress::Checking => {
-                    // If we got an error while checking all exercises in parallel,
-                    // it could be because we exceeded the limit of open file descriptors.
-                    // Therefore, try running exercises with errors sequentially.
+                    // Retry failed exercises sequentially (may have hit fd limit)
                     progresses[exercise_ind] = CheckProgress::Checking;
-                    progress_visualizer.update(&progresses)?;
+                    visualizer.update(progresses)?;
 
-                    let exercise = &self.exercises[exercise_ind];
-                    let success = exercise.run_exercise(None, &self.cmd_runner)?;
-                    if success {
-                        progresses[exercise_ind] = CheckProgress::Done;
+                    let success =
+                        self.exercises[exercise_ind].run_exercise(None, &self.cmd_runner)?;
+
+                    progresses[exercise_ind] = if success {
+                        CheckProgress::Done
                     } else {
-                        progresses[exercise_ind] = CheckProgress::Pending;
-                        if first_pending_exercise_ind.is_none() {
-                            first_pending_exercise_ind = Some(exercise_ind);
+                        if first_pending.is_none() {
+                            first_pending = Some(exercise_ind);
                         }
-                    }
+                        CheckProgress::Pending
+                    };
+
                     self.set_status(exercise_ind, success)?;
-                    progress_visualizer.update(&progresses)?;
+                    visualizer.update(progresses)?;
                 }
             }
         }
 
-        self.write()?;
-
-        Ok(first_pending_exercise_ind)
+        Ok(first_pending)
     }
 
     // Return the exercise index of the first pending exercise found.
