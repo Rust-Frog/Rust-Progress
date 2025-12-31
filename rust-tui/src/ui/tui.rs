@@ -124,29 +124,13 @@ pub fn run_tui(app_state: &mut AppState) -> Result<()> {
     loop {
         terminal.draw(|frame| render(frame, &mut state))?;
 
-        if event::poll(Duration::from_millis(FILE_WATCH_POLL_MS))? {
-            match event::read()? {
-                Event::Key(key) => {
-                    if key.kind == KeyEventKind::Press
-                        && let Some(should_quit) = handle_key(key, &mut state)?
-                        && should_quit
-                    {
-                        break;
-                    }
-                }
-                Event::Mouse(mouse) => match mouse.kind {
-                    event::MouseEventKind::ScrollDown => {
-                        state.output_scroll = state.output_scroll.saturating_add(2);
-                    }
-                    event::MouseEventKind::ScrollUp => {
-                        state.output_scroll = state.output_scroll.saturating_sub(2);
-                    }
-                    _ => {}
-                },
-                _ => {}
-            }
-        } else {
+        if !event::poll(Duration::from_millis(FILE_WATCH_POLL_MS))? {
             state.check_external_file_change()?;
+            continue;
+        }
+
+        if handle_event(event::read()?, &mut state)? {
+            break;
         }
     }
 
@@ -158,4 +142,30 @@ pub fn run_tui(app_state: &mut AppState) -> Result<()> {
         Show
     )?;
     Ok(())
+}
+
+// returns true if should quit
+fn handle_event(event: Event, state: &mut TuiState) -> Result<bool> {
+    match event {
+        Event::Key(key) if key.kind == KeyEventKind::Press => {
+            Ok(handle_key(key, state)?.unwrap_or(false))
+        }
+        Event::Mouse(mouse) => {
+            handle_mouse(mouse, state);
+            Ok(false)
+        }
+        _ => Ok(false),
+    }
+}
+
+fn handle_mouse(mouse: event::MouseEvent, state: &mut TuiState) {
+    match mouse.kind {
+        event::MouseEventKind::ScrollDown => {
+            state.output_scroll = state.output_scroll.saturating_add(2);
+        }
+        event::MouseEventKind::ScrollUp => {
+            state.output_scroll = state.output_scroll.saturating_sub(2);
+        }
+        _ => {}
+    }
 }
