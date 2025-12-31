@@ -37,25 +37,43 @@ impl BracketMatch {
         None
     }
 
-    fn scan_line(&mut self, chars: &[char], start: usize, forward: bool) -> Option<usize> {
-        if forward {
-            for (col, &c) in chars.iter().enumerate().skip(start) {
-                if let Some(result) = self.check(c, col) {
-                    return Some(result);
-                }
+    fn scan_forward(&mut self, chars: &[char], start: usize) -> Option<usize> {
+        for (col, &c) in chars.iter().enumerate().skip(start) {
+            if let Some(result) = self.check(c, col) {
+                return Some(result);
             }
-        } else {
-            // when going backward, swap open/close
-            std::mem::swap(&mut self.open, &mut self.close);
-            for col in (0..=start).rev() {
-                if let Some(result) = self.check(chars[col], col) {
-                    return Some(result);
-                }
-            }
-            std::mem::swap(&mut self.open, &mut self.close);
         }
         None
     }
+
+    fn scan_backward(&mut self, chars: &[char], start: usize) -> Option<usize> {
+        // swap for backward search
+        std::mem::swap(&mut self.open, &mut self.close);
+        let result = (0..=start)
+            .rev()
+            .find_map(|col| self.check(chars[col], col));
+        std::mem::swap(&mut self.open, &mut self.close);
+        result
+    }
+}
+
+// expand word boundaries to include surrounding whitespace (for daw)
+fn expand_whitespace(chars: &[char], mut start: usize, mut end: usize) -> (usize, usize) {
+    let orig_end = end;
+
+    // try trailing whitespace first
+    while end < chars.len() && chars[end].is_whitespace() {
+        end += 1;
+    }
+
+    // if no trailing, try leading
+    if end == orig_end && start > 0 {
+        while start > 0 && chars[start - 1].is_whitespace() {
+            start -= 1;
+        }
+    }
+
+    (start, end)
 }
 
 pub struct TextEditor {
@@ -410,19 +428,8 @@ impl TextEditor {
             return None;
         }
 
-        let (mut start, mut end) = self.find_word_boundaries(&chars);
-
-        // Also include trailing whitespace (or leading if at end of line)
-        let orig_end = end;
-        while end < chars.len() && chars[end].is_whitespace() {
-            end += 1;
-        }
-        // If no trailing whitespace, try leading
-        if end == orig_end && start > 0 {
-            while start > 0 && chars[start - 1].is_whitespace() {
-                start -= 1;
-            }
-        }
+        let (start, end) = self.find_word_boundaries(&chars);
+        let (start, end) = expand_whitespace(&chars, start, end);
 
         let deleted = self.delete_range(&chars, start, end);
         self.cursor_col = start.min(self.lines[self.cursor_row].len());
@@ -460,7 +467,7 @@ impl TextEditor {
 
         while row < self.lines.len() {
             let chars: Vec<char> = self.lines[row].chars().collect();
-            if let Some(result) = matcher.scan_line(&chars, col, true) {
+            if let Some(result) = matcher.scan_forward(&chars, col) {
                 return Some((row, result));
             }
             row += 1;
@@ -482,7 +489,7 @@ impl TextEditor {
             }
 
             let chars: Vec<char> = self.lines[row as usize].chars().collect();
-            if let Some(result) = matcher.scan_line(&chars, col as usize, false) {
+            if let Some(result) = matcher.scan_backward(&chars, col as usize) {
                 return Some((row as usize, result));
             }
 
