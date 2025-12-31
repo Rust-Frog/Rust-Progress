@@ -13,13 +13,7 @@
 // fn calculate_price_of_apples(???) -> ??? { ??? }
 
 pub fn calculate_price_of_apples(apples: i32) -> i32 {
-
-    if apples > 40 {
-        apples
-    } else {
-        apples * 2
-    }
-
+    if apples > 40 { apples } else { apples * 2 }
 }
 
 fn main() {

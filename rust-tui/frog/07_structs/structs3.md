@@ -11,20 +11,20 @@ But what if you want them to DO things?
 
 
 ```
-┌─────────────────────────────────────────┐
-│                                         │
-│  A Rectangle struct has width & height  │
-│                                         │
-│  Wouldn't it be nice to ask:            │
-│    "Hey rectangle, what's your area?"   │
-│                                         │
-│  Instead of:                            │
+┌───────────────────────────────────────────┐
+│                                           │
+│  A Rectangle struct has width & height    │
+│                                           │
+│  Wouldn't it be nice to ask:              │
+│    "Hey rectangle, what's your area?"     │
+│                                           │
+│  Instead of:                              │
 │    calculate_area(rect.width, rect.height)│
-│                                         │
-│  We could write:                        │
-│    rect.area()                          │
-│                                         │
-└─────────────────────────────────────────┘
+│                                           │
+│  We could write:                          │
+│    rect.area()                            │
+│                                           │
+└───────────────────────────────────────────┘
 ```
 
 
@@ -50,19 +50,19 @@ A method is just a function that:
 
 
 ```
-┌─────────────────────────────────────────┐
-│                                         │
-│  REGULAR FUNCTION:                      │
-│    fn calculate_area(w: u32, h: u32)    │
+┌───────────────────────────────────────────┐
+│                                           │
+│  REGULAR FUNCTION:                        │
+│    fn calculate_area(w: u32, h: u32)      │
 │    calculate_area(rect.width, rect.height)│
-│                                         │
-│  METHOD:                                │
-│    fn area(&self)                       │
-│    rect.area()                          │
-│                                         │
-│  Methods KNOW about their struct!       │
-│                                         │
-└─────────────────────────────────────────┘
+│                                           │
+│  METHOD:                                  │
+│    fn area(&self)                         │
+│    rect.area()                            │
+│                                           │
+│  Methods KNOW about their struct!         │
+│                                           │
+└───────────────────────────────────────────┘
 ```
 
 
@@ -103,6 +103,11 @@ impl Rectangle {
 │   the Rectangle type"                   │
 │                                         │
 └─────────────────────────────────────────┘
+
+
+
+
+-
 ```
 
 
