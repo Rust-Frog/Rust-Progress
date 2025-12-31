@@ -3,12 +3,38 @@ use crate::ui::state::{EditorMode, TuiState};
 use anyhow::Result;
 use crossterm::event::{self, KeyCode};
 
+// encapsulate selection range to reduce arg count
+struct Bounds {
+    start_row: usize,
+    start_col: usize,
+    end_row: usize,
+    end_col: usize,
+}
+
+impl Bounds {
+    fn from_state(state: &TuiState) -> Self {
+        let (start_row, start_col, end_row, end_col) = get_selection_bounds(state);
+        Self {
+            start_row,
+            start_col,
+            end_row,
+            end_col,
+        }
+    }
+
+    fn is_single_line(&self) -> bool {
+        self.start_row == self.end_row
+    }
+}
+
 pub fn handle_visual_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Option<bool>> {
     match key.code {
         KeyCode::Esc => {
             state.mode = EditorMode::Normal;
             Ok(None)
         }
+
+        // movement
         KeyCode::Char('h') | KeyCode::Left => {
             state.editor.move_left();
             Ok(None)
@@ -33,124 +59,121 @@ pub fn handle_visual_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<
             state.editor.move_to_line_end();
             Ok(None)
         }
-        // y - Yank (copy) selection
+
+        // actions
         KeyCode::Char('y') => {
-            let selected_text = get_visual_selection(state);
-            state.yank_buffer = Some(selected_text);
+            state.yank_buffer = Some(get_visual_selection(state));
             state.mode = EditorMode::Normal;
             Ok(None)
         }
-        // d - Delete selection
         KeyCode::Char('d') => {
             delete_visual_selection(state);
             state.mode = EditorMode::Normal;
             Ok(None)
         }
+
         _ => Ok(None),
     }
 }
 
-/// Get text within the visual selection
-pub fn get_visual_selection(state: &TuiState) -> String {
-    let (start_row, start_col, end_row, end_col) = get_selection_bounds(state);
-
-    if start_row == end_row {
-        // Single line selection
-        if let Some(line) = state.editor.lines.get(start_row) {
-            let line_chars: Vec<char> = line.chars().collect();
-            let start = start_col.min(line_chars.len());
-            let end = (end_col + 1).min(line_chars.len());
-            return line_chars[start..end].iter().collect();
-        }
-    } else {
-        // Multi-line selection
-        let mut result = String::new();
-        for row in start_row..=end_row {
-            if let Some(line) = state.editor.lines.get(row) {
-                let line_chars: Vec<char> = line.chars().collect();
-                if row == start_row {
-                    let start = start_col.min(line_chars.len());
-                    let s: String = line_chars[start..].iter().collect();
-                    result.push_str(&s);
-                    result.push('\n');
-                } else if row == end_row {
-                    let end = (end_col + 1).min(line_chars.len());
-                    let s: String = line_chars[..end].iter().collect();
-                    result.push_str(&s);
-                } else {
-                    result.push_str(line);
-                    result.push('\n');
-                }
-            }
-        }
-        return result;
-    }
-    String::new()
+// helper: get chars from a line, safely
+fn line_chars(lines: &[String], row: usize) -> Vec<char> {
+    lines
+        .get(row)
+        .map(|l| l.chars().collect())
+        .unwrap_or_default()
 }
 
-/// Delete text within the visual selection
-pub fn delete_visual_selection(state: &mut TuiState) {
-    let (start_row, start_col, end_row, end_col) = get_selection_bounds(state);
+// helper: slice chars from start to end (inclusive end_col)
+fn slice_chars(chars: &[char], start: usize, end: usize) -> String {
+    let s = start.min(chars.len());
+    let e = end.min(chars.len());
+    chars[s..e].iter().collect()
+}
 
-    // Yank before deleting
-    let selected = get_visual_selection(state);
-    state.yank_buffer = Some(selected);
+pub fn get_visual_selection(state: &TuiState) -> String {
+    let b = Bounds::from_state(state);
+
+    if b.is_single_line() {
+        let chars = line_chars(&state.editor.lines, b.start_row);
+        return slice_chars(&chars, b.start_col, b.end_col + 1);
+    }
+
+    // multi-line
+    let mut result = String::new();
+    for row in b.start_row..=b.end_row {
+        let chars = line_chars(&state.editor.lines, row);
+
+        let slice = if row == b.start_row {
+            slice_chars(&chars, b.start_col, chars.len())
+        } else if row == b.end_row {
+            slice_chars(&chars, 0, b.end_col + 1)
+        } else {
+            chars.iter().collect()
+        };
+
+        result.push_str(&slice);
+        if row != b.end_row {
+            result.push('\n');
+        }
+    }
+    result
+}
+
+pub fn delete_visual_selection(state: &mut TuiState) {
+    let b = Bounds::from_state(state);
+
+    // yank before delete
+    state.yank_buffer = Some(get_visual_selection(state));
     state.modified = true;
 
-    if start_row == end_row {
-        // Single line deletion
-        if let Some(line) = state.editor.lines.get_mut(start_row) {
-            let line_chars: Vec<char> = line.chars().collect();
-            let start = start_col.min(line_chars.len());
-            let end = (end_col + 1).min(line_chars.len());
-
-            // Convert char indices back to byte indices for replace_range
-            let byte_start: usize = line_chars[..start].iter().map(|c| c.len_utf8()).sum();
-            let byte_end: usize = byte_start
-                + line_chars[start..end]
-                    .iter()
-                    .map(|c| c.len_utf8())
-                    .sum::<usize>();
-            line.replace_range(byte_start..byte_end, "");
-        }
+    if b.is_single_line() {
+        delete_single_line(state, &b);
     } else {
-        // Multi-line deletion: keep start of first line, end of last line, remove middle lines
-        let first_part: String = state
-            .editor
-            .lines
-            .get(start_row)
-            .map(|l| {
-                let chars: Vec<char> = l.chars().collect();
-                chars[..start_col.min(chars.len())]
-                    .iter()
-                    .collect::<String>()
-            })
-            .unwrap_or_default();
-        let last_part: String = state
-            .editor
-            .lines
-            .get(end_row)
-            .map(|l| {
-                let chars: Vec<char> = l.chars().collect();
-                chars[(end_col + 1).min(chars.len())..]
-                    .iter()
-                    .collect::<String>()
-            })
-            .unwrap_or_default();
+        delete_multi_line(state, &b);
+    }
 
-        // Remove lines from start_row+1 to end_row
-        for _ in start_row..end_row {
-            if start_row + 1 < state.editor.lines.len() {
-                state.editor.lines.remove(start_row + 1);
-            }
-        }
-        // Merge first and last parts
-        if let Some(line) = state.editor.lines.get_mut(start_row) {
-            *line = first_part + &last_part;
+    state.editor.cursor_row = b.start_row;
+    state.editor.cursor_col = b.start_col;
+}
+
+fn delete_single_line(state: &mut TuiState, b: &Bounds) {
+    let Some(line) = state.editor.lines.get_mut(b.start_row) else {
+        return;
+    };
+
+    let chars: Vec<char> = line.chars().collect();
+    let start = b.start_col.min(chars.len());
+    let end = (b.end_col + 1).min(chars.len());
+
+    // char indices -> byte indices
+    let byte_start: usize = chars[..start].iter().map(|c| c.len_utf8()).sum();
+    let byte_end: usize = byte_start
+        + chars[start..end]
+            .iter()
+            .map(|c| c.len_utf8())
+            .sum::<usize>();
+
+    line.replace_range(byte_start..byte_end, "");
+}
+
+fn delete_multi_line(state: &mut TuiState, b: &Bounds) {
+    // get the parts to keep
+    let first_chars = line_chars(&state.editor.lines, b.start_row);
+    let last_chars = line_chars(&state.editor.lines, b.end_row);
+
+    let keep_first = slice_chars(&first_chars, 0, b.start_col);
+    let keep_last = slice_chars(&last_chars, b.end_col + 1, last_chars.len());
+
+    // remove middle lines
+    for _ in b.start_row..b.end_row {
+        if b.start_row + 1 < state.editor.lines.len() {
+            state.editor.lines.remove(b.start_row + 1);
         }
     }
 
-    // Move cursor to start of selection
-    state.editor.cursor_row = start_row;
-    state.editor.cursor_col = start_col;
+    // merge
+    if let Some(line) = state.editor.lines.get_mut(b.start_row) {
+        *line = keep_first + &keep_last;
+    }
 }

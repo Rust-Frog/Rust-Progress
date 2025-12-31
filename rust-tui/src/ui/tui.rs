@@ -1,5 +1,3 @@
-//! TUI application entry point
-
 use std::fs;
 use std::io::stdout;
 use std::time::{Duration, Instant};
@@ -24,7 +22,6 @@ use crate::ui::{
 const FILE_WATCH_POLL_MS: u64 = 500;
 
 impl<'a> TuiState<'a> {
-    /// Create new TUI state for an exercise
     pub fn new(app_state: &'a mut AppState) -> Result<Self> {
         let exercise = app_state.current_exercise();
         let file_path = exercise.path.to_string();
@@ -65,7 +62,6 @@ impl<'a> TuiState<'a> {
 }
 
 fn render(frame: &mut Frame, state: &mut TuiState) {
-    // Use expanded layout for full-screen output mode
     let (header, main, footer) = if state.view_mode == ViewMode::ExpandedOutput {
         layout::expanded_layout(frame.area())
     } else {
@@ -116,7 +112,6 @@ fn handle_key(key: event::KeyEvent, state: &mut TuiState) -> Result<Option<bool>
     }
 }
 
-/// Run the TUI application
 pub fn run_tui(app_state: &mut AppState) -> Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = stdout();

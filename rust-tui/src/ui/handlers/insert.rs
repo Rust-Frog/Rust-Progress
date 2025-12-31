@@ -2,26 +2,32 @@ use crate::ui::state::{EditorMode, TuiState};
 use anyhow::Result;
 use crossterm::event::{self, KeyCode, KeyModifiers};
 
+// chars that auto-pair when typed
+const AUTO_PAIR: &[(char, char)] = &[('(', ')'), ('{', '}'), ('[', ']'), ('"', '"'), ('\'', '\'')];
+
+// chars we skip over if already at cursor
+const SKIP_CHARS: &[char] = &[')', '}', ']', '"', '\''];
+
+fn get_closing_pair(c: char) -> Option<char> {
+    AUTO_PAIR
+        .iter()
+        .find(|(open, _)| *open == c)
+        .map(|(_, close)| *close)
+}
+
+fn get_current_indent(state: &TuiState) -> usize {
+    state
+        .editor
+        .lines
+        .get(state.editor.cursor_row)
+        .map(|line| line.chars().take_while(|c| c.is_whitespace()).count())
+        .unwrap_or(0)
+}
+
 pub fn handle_insert_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<Option<bool>> {
-    // Handle Ctrl+Z (undo) and Ctrl+Shift+Z (redo) in Insert mode
+    // ctrl+z / ctrl+shift+z for undo/redo
     if key.modifiers.contains(KeyModifiers::CONTROL) {
-        match key.code {
-            KeyCode::Char('z') => {
-                // Ctrl+Z - undo
-                if state.editor.undo() {
-                    state.modified = true;
-                }
-                return Ok(None);
-            }
-            KeyCode::Char('Z') => {
-                // Ctrl+Shift+Z - redo (Shift makes it uppercase)
-                if state.editor.redo() {
-                    state.modified = true;
-                }
-                return Ok(None);
-            }
-            _ => {}
-        }
+        return handle_ctrl_key(key.code, state);
     }
 
     match key.code {
@@ -29,89 +35,14 @@ pub fn handle_insert_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<
             state.mode = EditorMode::Normal;
             Ok(None)
         }
-        KeyCode::Char(c) => {
-            // Skip-over: if typing a closing bracket that's already at cursor, just move past it
-            let skip_chars = [')', '}', ']', '"', '\''];
-            if skip_chars.contains(&c) && state.editor.char_at_cursor() == Some(c) {
-                state.editor.move_right();
-                return Ok(None);
-            }
 
-            state.modified = true;
-            state.editor.save_snapshot();
-            // Auto-brackets: insert closing pair and move cursor between
-            match c {
-                '(' => {
-                    state.editor.insert_char('(');
-                    state.editor.insert_char(')');
-                    state.editor.move_left();
-                }
-                '{' => {
-                    state.editor.insert_char('{');
-                    state.editor.insert_char('}');
-                    state.editor.move_left();
-                }
-                '[' => {
-                    state.editor.insert_char('[');
-                    state.editor.insert_char(']');
-                    state.editor.move_left();
-                }
-                '"' => {
-                    state.editor.insert_char('"');
-                    state.editor.insert_char('"');
-                    state.editor.move_left();
-                }
-                '\'' => {
-                    state.editor.insert_char('\'');
-                    state.editor.insert_char('\'');
-                    state.editor.move_left();
-                }
-                _ => {
-                    state.editor.insert_char(c);
-                }
-            }
-            Ok(None)
-        }
-        KeyCode::Tab => {
-            state.modified = true;
-            state.editor.save_snapshot();
-            for _ in 0..4 {
-                state.editor.insert_char(' ');
-            }
-            Ok(None)
-        }
-        KeyCode::Enter => {
-            state.modified = true;
-            state.editor.save_snapshot();
-            // Auto-indentation similar to VS Code:
-            // 1. Get current indentation
-            let current_indent = if state.editor.cursor_row < state.editor.lines.len() {
-                let line = &state.editor.lines[state.editor.cursor_row];
-                line.chars().take_while(|c| c.is_whitespace()).count()
-            } else {
-                0
-            };
+        KeyCode::Char(c) => handle_char(c, state),
+        KeyCode::Tab => handle_tab(state),
+        KeyCode::Enter => handle_enter(state),
+        KeyCode::Backspace => handle_backspace(state),
+        KeyCode::Delete => handle_delete(state),
 
-            state.editor.insert_newline();
-
-            // 2. Apply indentation to new line
-            for _ in 0..current_indent {
-                state.editor.insert_char(' ');
-            }
-            Ok(None)
-        }
-        KeyCode::Backspace => {
-            state.modified = true;
-            state.editor.save_snapshot();
-            state.editor.backspace();
-            Ok(None)
-        }
-        KeyCode::Delete => {
-            state.modified = true;
-            state.editor.save_snapshot();
-            state.editor.delete();
-            Ok(None)
-        }
+        // arrow keys
         KeyCode::Left => {
             state.editor.move_left();
             Ok(None)
@@ -128,6 +59,82 @@ pub fn handle_insert_mode(key: event::KeyEvent, state: &mut TuiState) -> Result<
             state.editor.move_down();
             Ok(None)
         }
+
         _ => Ok(None),
     }
+}
+
+fn handle_ctrl_key(code: KeyCode, state: &mut TuiState) -> Result<Option<bool>> {
+    match code {
+        KeyCode::Char('z') => {
+            if state.editor.undo() {
+                state.modified = true;
+            }
+        }
+        KeyCode::Char('Z') => {
+            if state.editor.redo() {
+                state.modified = true;
+            }
+        }
+        _ => {}
+    }
+    Ok(None)
+}
+
+fn handle_char(c: char, state: &mut TuiState) -> Result<Option<bool>> {
+    // skip over closing bracket if already there
+    if SKIP_CHARS.contains(&c) && state.editor.char_at_cursor() == Some(c) {
+        state.editor.move_right();
+        return Ok(None);
+    }
+
+    state.modified = true;
+    state.editor.save_snapshot();
+
+    // auto-pair: insert both open and close, cursor between
+    if let Some(close) = get_closing_pair(c) {
+        state.editor.insert_char(c);
+        state.editor.insert_char(close);
+        state.editor.move_left();
+    } else {
+        state.editor.insert_char(c);
+    }
+
+    Ok(None)
+}
+
+fn handle_tab(state: &mut TuiState) -> Result<Option<bool>> {
+    state.modified = true;
+    state.editor.save_snapshot();
+    for _ in 0..4 {
+        state.editor.insert_char(' ');
+    }
+    Ok(None)
+}
+
+fn handle_enter(state: &mut TuiState) -> Result<Option<bool>> {
+    state.modified = true;
+    state.editor.save_snapshot();
+
+    let indent = get_current_indent(state);
+    state.editor.insert_newline();
+
+    for _ in 0..indent {
+        state.editor.insert_char(' ');
+    }
+    Ok(None)
+}
+
+fn handle_backspace(state: &mut TuiState) -> Result<Option<bool>> {
+    state.modified = true;
+    state.editor.save_snapshot();
+    state.editor.backspace();
+    Ok(None)
+}
+
+fn handle_delete(state: &mut TuiState) -> Result<Option<bool>> {
+    state.modified = true;
+    state.editor.save_snapshot();
+    state.editor.delete();
+    Ok(None)
 }

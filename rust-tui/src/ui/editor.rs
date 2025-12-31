@@ -1,7 +1,6 @@
-/// Maximum undo history entries to prevent unbounded memory growth.
+// don't blow up memory with infinite undo
 const MAX_UNDO_HISTORY: usize = 100;
 
-/// Snapshot of editor state for undo/redo history.
 #[derive(Clone)]
 struct EditorSnapshot {
     lines: Vec<String>,
@@ -9,7 +8,6 @@ struct EditorSnapshot {
     cursor_col: usize,
 }
 
-/// Text editor with vim-style editing and undo/redo support.
 pub struct TextEditor {
     pub lines: Vec<String>,
     pub cursor_row: usize,
@@ -40,7 +38,6 @@ impl TextEditor {
         self.lines.join("\n")
     }
 
-    /// Create a snapshot of current editor state.
     fn create_snapshot(&self) -> EditorSnapshot {
         EditorSnapshot {
             lines: self.lines.clone(),
@@ -49,28 +46,23 @@ impl TextEditor {
         }
     }
 
-    /// Restore editor state from a snapshot.
     fn restore_snapshot(&mut self, snapshot: EditorSnapshot) {
         self.lines = snapshot.lines;
         self.cursor_row = snapshot.cursor_row;
         self.cursor_col = snapshot.cursor_col;
     }
 
-    /// Save current state to undo history. Call before any edit operation.
     pub fn save_snapshot(&mut self) {
         let snapshot = self.create_snapshot();
         self.undo_stack.push(snapshot);
 
-        // Limit history size
         if self.undo_stack.len() > MAX_UNDO_HISTORY {
             self.undo_stack.remove(0);
         }
 
-        // Clear redo stack on new edit
         self.redo_stack.clear();
     }
 
-    /// Undo the last edit operation. Returns true if undo was performed.
     pub fn undo(&mut self) -> bool {
         if let Some(snapshot) = self.undo_stack.pop() {
             self.redo_stack.push(self.create_snapshot());
@@ -81,7 +73,6 @@ impl TextEditor {
         }
     }
 
-    /// Redo the last undone operation. Returns true if redo was performed.
     pub fn redo(&mut self) -> bool {
         if let Some(snapshot) = self.redo_stack.pop() {
             self.undo_stack.push(self.create_snapshot());
@@ -178,7 +169,7 @@ impl TextEditor {
             .unwrap_or(0)
     }
 
-    /// Convert a character index to a byte index in a string
+    // char idx -> byte idx
     fn char_to_byte_idx(s: &str, char_idx: usize) -> usize {
         s.char_indices()
             .nth(char_idx)
@@ -198,7 +189,7 @@ impl TextEditor {
         }
     }
 
-    // === Vim Movement Methods ===
+    // -- vim movement --
 
     pub fn move_to_line_start(&mut self) {
         self.cursor_col = 0;
@@ -272,7 +263,7 @@ impl TextEditor {
         self.clamp_col();
     }
 
-    // === Vim Editing Methods ===
+    // -- vim editing --
 
     pub fn delete_line(&mut self) -> Option<String> {
         if self.lines.len() > 1 {
@@ -319,14 +310,12 @@ impl TextEditor {
         }
     }
 
-    /// Get the character at the current cursor position (for skip-over logic)
     pub fn char_at_cursor(&self) -> Option<char> {
         self.lines
             .get(self.cursor_row)
             .and_then(|line| line.chars().nth(self.cursor_col))
     }
 
-    /// Find the word boundaries (start, end) around the cursor position.
     fn find_word_boundaries(&self, chars: &[char]) -> (usize, usize) {
         let mut start = self.cursor_col;
         let mut end = self.cursor_col;
@@ -342,7 +331,6 @@ impl TextEditor {
         (start, end)
     }
 
-    /// Delete a range from the current line and return the deleted text.
     fn delete_range(&mut self, chars: &[char], start: usize, end: usize) -> String {
         let deleted: String = chars[start..end].iter().collect();
         let new_line: String = chars[..start].iter().chain(chars[end..].iter()).collect();
@@ -350,7 +338,7 @@ impl TextEditor {
         deleted
     }
 
-    /// Delete inner word (diw) - just the word, not surrounding spaces
+    // diw
     pub fn delete_inner_word(&mut self) -> Option<String> {
         let line = self.lines.get(self.cursor_row)?;
         let chars: Vec<char> = line.chars().collect();
@@ -364,7 +352,7 @@ impl TextEditor {
         Some(deleted)
     }
 
-    /// Delete around word (daw) - word plus trailing/leading whitespace
+    // daw
     pub fn delete_around_word(&mut self) -> Option<String> {
         let line = self.lines.get(self.cursor_row)?;
         let chars: Vec<char> = line.chars().collect();
@@ -391,9 +379,7 @@ impl TextEditor {
         Some(deleted)
     }
 
-    /// Find the matching bracket for the character at cursor position.
-    /// Returns `(row, col)` of the matching bracket, or None if no bracket at cursor
-    /// or no matching bracket found.
+    // % - find matching bracket
     pub fn find_matching_bracket(&self) -> Option<(usize, usize)> {
         let char_at_cursor = self.char_at_cursor()?;
 

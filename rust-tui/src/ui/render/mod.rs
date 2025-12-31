@@ -15,7 +15,7 @@ pub use header::render_header;
 pub use help::render_help_modal;
 pub use panels::{render_expanded_output, render_solution};
 
-/// Utility to strip ANSI codes for clean TUI display
+// strip ansi escape codes
 pub fn strip_ansi_codes(s: &str) -> String {
     let mut clean = String::with_capacity(s.len());
     let mut in_escape = false;
@@ -41,7 +41,6 @@ pub fn strip_ansi_codes(s: &str) -> String {
 }
 
 pub fn highlight_rust_line(line: &str, _is_current: bool) -> Line<'static> {
-    // Simple syntax highlighting
     let mut spans = Vec::new();
     let chars: Vec<char> = line.chars().collect();
     let mut i = 0;
