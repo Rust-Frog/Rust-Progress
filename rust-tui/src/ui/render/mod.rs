@@ -18,26 +18,27 @@ pub use panels::{render_expanded_output, render_solution};
 // strip ansi escape codes
 pub fn strip_ansi_codes(s: &str) -> String {
     let mut clean = String::with_capacity(s.len());
-    let mut in_escape = false;
     let mut chars = s.chars().peekable();
 
     while let Some(c) = chars.next() {
         if c == '\x1b' {
-            in_escape = true;
-            if let Some('[') = chars.peek() {
-                chars.next();
-            }
-            continue;
-        }
-        if in_escape {
-            if c.is_ascii_alphabetic() || c == '@' {
-                in_escape = false;
-            }
+            skip_ansi_sequence(&mut chars);
             continue;
         }
         clean.push(c);
     }
     clean
+}
+
+fn skip_ansi_sequence(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
+    if chars.peek() == Some(&'[') {
+        chars.next();
+    }
+    for c in chars.by_ref() {
+        if c.is_ascii_alphabetic() || c == '@' {
+            break;
+        }
+    }
 }
 
 // rust keywords for syntax highlighting
@@ -89,16 +90,17 @@ pub fn highlight_rust_line(line: &str, _is_current: bool) -> Line<'static> {
 
 // try to parse // comment
 fn try_parse_comment(chars: &[char], i: usize) -> Option<(Span<'static>, usize)> {
-    if i + 1 < chars.len() && chars[i] == '/' && chars[i + 1] == '/' {
-        let comment: String = chars[i..].iter().collect();
-        let len = comment.len();
-        Some((
-            Span::styled(comment, Style::default().fg(theme::colors::COMMENT)),
-            len,
-        ))
-    } else {
-        None
+    let is_comment = chars.get(i..i + 2) == Some(&['/', '/']);
+    if !is_comment {
+        return None;
     }
+
+    let comment: String = chars[i..].iter().collect();
+    let len = comment.len();
+    Some((
+        Span::styled(comment, Style::default().fg(theme::colors::COMMENT)),
+        len,
+    ))
 }
 
 // try to parse "string"
@@ -160,14 +162,19 @@ fn try_parse_number(chars: &[char], start: usize) -> Option<(Span<'static>, usiz
         return None;
     }
 
-    let mut i = start;
-    while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
-        i += 1;
-    }
+    let end = chars[start..]
+        .iter()
+        .position(|&c| !is_number_char(c))
+        .map(|p| start + p)
+        .unwrap_or(chars.len());
 
-    let num: String = chars[start..i].iter().collect();
+    let num: String = chars[start..end].iter().collect();
     Some((
         Span::styled(num, Style::default().fg(theme::colors::NUMBER)),
-        i - start,
+        end - start,
     ))
+}
+
+fn is_number_char(c: char) -> bool {
+    c.is_ascii_digit() || c == '.'
 }
