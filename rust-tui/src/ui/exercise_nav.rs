@@ -74,43 +74,51 @@ impl<'a> TuiState<'a> {
             .current_exercise()
             .run_exercise(Some(&mut self.output_buffer), self.app_state.cmd_runner())?;
 
-        if success {
-            let current_ind = self.app_state.current_exercise_ind();
-            self.app_state.set_status(current_ind, true)?;
-            self.app_state.write()?;
-
-            let solution_msg = if let Ok(Some(sol_path)) = self.app_state.current_solution_path() {
-                format!("\n\nSolution available: {}", sol_path)
-            } else {
-                String::new()
-            };
-
-            if self.auto_advance {
-                if let Some(next_pending) = self.find_next_pending_exercise() {
-                    self.app_state.set_current_exercise_ind(next_pending)?;
-                    self.reload_exercise()?;
-                    self.output = format!(
-                        "{} Complete! Auto-advanced to: {}",
-                        theme::icons::DONE,
-                        self.file_path.split('/').next_back().unwrap_or("next")
-                    );
-                } else {
-                    self.output = format!(
-                        "{} Congratulations! All exercises complete! 🎉",
-                        theme::icons::DONE
-                    );
-                }
-            } else {
-                self.output = format!(
-                    "{} Exercise passed! Press ']' for next.{}",
-                    theme::icons::DONE,
-                    solution_msg
-                );
-            }
-            Ok(true)
-        } else {
+        if !success {
             self.output = String::from_utf8_lossy(&self.output_buffer).to_string();
-            Ok(false)
+            return Ok(false);
+        }
+
+        // Mark as done
+        let current_ind = self.app_state.current_exercise_ind();
+        self.app_state.set_status(current_ind, true)?;
+        self.app_state.write()?;
+
+        self.output = self.build_success_message()?;
+        Ok(true)
+    }
+
+    fn build_success_message(&mut self) -> Result<String> {
+        if !self.auto_advance {
+            let solution_hint = self
+                .app_state
+                .current_solution_path()
+                .ok()
+                .flatten()
+                .map(|p| format!("\n\nSolution available: {}", p))
+                .unwrap_or_default();
+            return Ok(format!(
+                "{} Exercise passed! Press ']' for next.{}",
+                theme::icons::DONE,
+                solution_hint
+            ));
+        }
+
+        // Auto-advance mode
+        match self.find_next_pending_exercise() {
+            Some(next) => {
+                self.app_state.set_current_exercise_ind(next)?;
+                self.reload_exercise()?;
+                Ok(format!(
+                    "{} Complete! Auto-advanced to: {}",
+                    theme::icons::DONE,
+                    self.file_path.split('/').next_back().unwrap_or("next")
+                ))
+            }
+            None => Ok(format!(
+                "{} Congratulations! All exercises complete! 🎉",
+                theme::icons::DONE
+            )),
         }
     }
 
