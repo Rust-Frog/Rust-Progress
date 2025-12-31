@@ -55,21 +55,21 @@ Each variant can hold DIFFERENT types of data!
 
 
 ```
-┌─────────────────────────────────────────┐
-│                                         │
-│  enum Message {                         │
-│      Quit,                     // no data│
-│      Move { x: i32, y: i32 },  // struct │
-│      Write(String),            // 1 value│
+┌───────────────────────────────────────────┐
+│                                           │
+│  enum Message {                           │
+│      Quit,                     // no data │
+│      Move { x: i32, y: i32 },  // struct  │
+│      Write(String),            // 1 value │
 │      ChangeColor(u8, u8, u8),  // 3 values│
-│  }                                       │
-│                                         │
-│  ONE type, FOUR different data shapes!  │
-│                                         │
-│  This is called a "tagged union" or     │
-│  "sum type" in computer science.        │
-│                                         │
-└─────────────────────────────────────────┘
+│  }                                        │
+│                                           │
+│  ONE type, FOUR different data shapes!    │
+│                                           │
+│  This is called a "tagged union" or       │
+│  "sum type" in computer science.          │
+│                                           │
+└───────────────────────────────────────────┘
 ```
 
 
@@ -341,21 +341,21 @@ let resize = Message::Resize {
 
 
 ```
-┌─────────────────────────────────────────┐
-│                                         │
-│  Message::Resize {                      │
-│      width: 800,    ← named field       │
-│      height: 600,   ← named field       │
-│  }                                      │
-│                                         │
-│  Just like creating a regular struct,   │
-│  but prefixed with the enum and variant.│
-│                                         │
-│  Field ORDER doesn't matter:            │
+┌─────────────────────────────────────────────┐
+│                                             │
+│  Message::Resize {                          │
+│      width: 800,    ← named field           │
+│      height: 600,   ← named field           │
+│  }                                          │
+│                                             │
+│  Just like creating a regular struct,       │
+│  but prefixed with the enum and variant.    │
+│                                             │
+│  Field ORDER doesn't matter:                │
 │  Message::Resize { height: 600, width: 800 }│
-│  Works the same!                        │
-│                                         │
-└─────────────────────────────────────────┘
+│  Works the same!                            │
+│                                             │
+└─────────────────────────────────────────────┘
 ```
 
 

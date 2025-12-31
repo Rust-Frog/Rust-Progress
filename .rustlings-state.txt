@@ -36,3 +36,4 @@ structs1
 structs2
 structs3
 enums1
+enums2
