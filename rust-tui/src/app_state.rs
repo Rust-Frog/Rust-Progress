@@ -220,14 +220,6 @@ impl AppState {
         self.emit_file_links
     }
 
-    // Write the state file.
-    // The file's format is very simple:
-    // - The first line is a comment.
-    // - The second line is an empty line.
-    // - The third line is the name of the current exercise. It must end with `\n` even if there
-    // are no done exercises.
-    // - The fourth line is an empty line.
-    // - All remaining lines are the names of done exercises.
     pub fn write(&mut self) -> Result<()> {
         self.file_buf.truncate(STATE_FILE_HEADER.len());
 

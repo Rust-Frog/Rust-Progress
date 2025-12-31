@@ -12,15 +12,7 @@ impl TuiState<'_> {
                 self.save()?;
                 Ok(Some(false))
             }
-            "q" => {
-                if self.modified {
-                    self.output =
-                        format!("{} Unsaved changes! Use :q! or :wq", theme::icons::ERROR);
-                    Ok(Some(false))
-                } else {
-                    Ok(Some(true))
-                }
-            }
+            "q" => self.cmd_quit(false),
             "q!" => Ok(Some(true)),
             "wq" | "x" => {
                 self.save()?;
@@ -30,11 +22,7 @@ impl TuiState<'_> {
                 self.compile()?;
                 Ok(Some(false))
             }
-            "h" | "hint" => {
-                let hint = &self.app_state.current_exercise().hint;
-                self.output = format!("{} {}", theme::icons::HINT, hint);
-                Ok(Some(false))
-            }
+            "h" | "hint" => self.cmd_hint(),
             "s" | "sol" | "solution" => {
                 self.toggle_solution();
                 Ok(Some(false))
@@ -47,37 +35,10 @@ impl TuiState<'_> {
                 self.prev_exercise()?;
                 Ok(Some(false))
             }
-            "auto" => {
-                self.auto_advance = !self.auto_advance;
-                let status = if self.auto_advance { "ON" } else { "OFF" };
-                self.output = format!("{} Auto-advance: {}", theme::icons::DONE, status);
-                Ok(Some(false))
-            }
-            "watch" => {
-                self.auto_compile_on_change = !self.auto_compile_on_change;
-                let status = if self.auto_compile_on_change {
-                    "ON"
-                } else {
-                    "OFF"
-                };
-                self.output = format!(
-                    "{} Auto-compile on file change: {}",
-                    theme::icons::DONE,
-                    status
-                );
-                Ok(Some(false))
-            }
-            "r" | "reload" => {
-                self.reload_exercise()?;
-                self.output = format!("{} Exercise reloaded from disk", theme::icons::INFO);
-                Ok(Some(false))
-            }
-            "reset" => {
-                self.app_state.reset_current_exercise()?;
-                self.reload_exercise()?;
-                self.output = format!("{} Exercise reset to original", theme::icons::DONE);
-                Ok(Some(false))
-            }
+            "auto" => self.cmd_toggle_auto(),
+            "watch" => self.cmd_toggle_watch(),
+            "r" | "reload" => self.cmd_reload(),
+            "reset" => self.cmd_reset(),
             "help" => {
                 self.view_mode = crate::ui::state::ViewMode::HelpModal;
                 Ok(Some(false))
@@ -91,5 +52,55 @@ impl TuiState<'_> {
                 Ok(Some(false))
             }
         }
+    }
+
+    fn cmd_quit(&mut self, force: bool) -> Result<Option<bool>> {
+        if !force && self.modified {
+            self.output = format!("{} Unsaved changes! Use :q! or :wq", theme::icons::ERROR);
+            Ok(Some(false))
+        } else {
+            Ok(Some(true))
+        }
+    }
+
+    fn cmd_hint(&mut self) -> Result<Option<bool>> {
+        let hint = &self.app_state.current_exercise().hint;
+        self.output = format!("{} {}", theme::icons::HINT, hint);
+        Ok(Some(false))
+    }
+
+    fn cmd_toggle_auto(&mut self) -> Result<Option<bool>> {
+        self.auto_advance = !self.auto_advance;
+        let status = if self.auto_advance { "ON" } else { "OFF" };
+        self.output = format!("{} Auto-advance: {}", theme::icons::DONE, status);
+        Ok(Some(false))
+    }
+
+    fn cmd_toggle_watch(&mut self) -> Result<Option<bool>> {
+        self.auto_compile_on_change = !self.auto_compile_on_change;
+        let status = if self.auto_compile_on_change {
+            "ON"
+        } else {
+            "OFF"
+        };
+        self.output = format!(
+            "{} Auto-compile on file change: {}",
+            theme::icons::DONE,
+            status
+        );
+        Ok(Some(false))
+    }
+
+    fn cmd_reload(&mut self) -> Result<Option<bool>> {
+        self.reload_exercise()?;
+        self.output = format!("{} Exercise reloaded from disk", theme::icons::INFO);
+        Ok(Some(false))
+    }
+
+    fn cmd_reset(&mut self) -> Result<Option<bool>> {
+        self.app_state.reset_current_exercise()?;
+        self.reload_exercise()?;
+        self.output = format!("{} Exercise reset to original", theme::icons::DONE);
+        Ok(Some(false))
     }
 }
