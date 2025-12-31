@@ -22,11 +22,19 @@ impl<'a> TuiState<'a> {
     pub fn check_external_file_change(&mut self) -> Result<bool> {
         let current_modified = Self::get_file_modified_time(&self.file_path);
 
-        if let (Some(last), Some(current)) = (self.last_file_modified, current_modified)
-            && current > last
-            && !self.modified
-        {
-            self.last_file_modified = Some(current);
+        // Skip if modified locally or can't compare timestamps
+        if self.modified {
+            self.last_file_modified = current_modified;
+            return Ok(false);
+        }
+
+        let file_changed = match (self.last_file_modified, current_modified) {
+            (Some(last), Some(current)) => current > last,
+            _ => false,
+        };
+
+        if file_changed {
+            self.last_file_modified = current_modified;
             let content = fs::read_to_string(&self.file_path)?;
             self.editor = TextEditor::new(&content);
             self.output = format!("{} File changed externally, reloaded!", theme::icons::INFO);
@@ -36,6 +44,7 @@ impl<'a> TuiState<'a> {
             }
             return Ok(true);
         }
+
         self.last_file_modified = current_modified;
         Ok(false)
     }
