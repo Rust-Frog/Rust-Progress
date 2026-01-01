@@ -235,6 +235,10 @@ let color = Message::Color(255, 128, 0);
 │  matching the types you defined.        │
 │                                         │
 └─────────────────────────────────────────┘
+
+
+
+-
 ```
 
 
@@ -276,6 +280,10 @@ enum Message {
 │  You're putting a Point inside a Move.  │
 │                                         │
 └─────────────────────────────────────────┘
+
+
+
+-
 ```
 
 
@@ -539,6 +547,9 @@ msg.call();  // prints the message
 │  The method works on ANY variant.       │
 │                                         │
 └─────────────────────────────────────────┘
+
+
+-
 ```
 
 

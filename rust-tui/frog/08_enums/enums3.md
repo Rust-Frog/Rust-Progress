@@ -19,7 +19,7 @@ But how do you RESPOND differently to each one?
 │      // msg could be ANY variant!       │
 │      // How do I know which one?        │
 │      // How do I get the data inside?   │
-│  }                                       │
+│  }                                      │
 │                                         │
 │  If it's Quit → do one thing            │
 │  If it's Move → do something else       │
@@ -70,7 +70,7 @@ match some_value {
 │      What to     What to do             │
 │      look for    if it matches          │
 │                                         │
-│  }                                       │
+│  }                                      │
 │                                         │
 └─────────────────────────────────────────┘
 ```
@@ -145,6 +145,9 @@ match coin {
 │  Comma separates arms.                  │
 │                                         │
 └─────────────────────────────────────────┘
+
+
+-
 ```
 
 
@@ -231,6 +234,9 @@ match direction {
 │  This prevents SO many bugs.            │
 │                                         │
 └─────────────────────────────────────────┘
+
+
+-
 ```
 
 
