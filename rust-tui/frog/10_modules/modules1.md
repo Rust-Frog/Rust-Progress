@@ -116,6 +116,8 @@ fn main() {
 │  These are all module paths!            │
 │                                         │
 └─────────────────────────────────────────┘
+
+-
 ```
 
 
@@ -310,6 +312,8 @@ mod my_module {
 │  No pub?          Private!              │
 │                                         │
 └─────────────────────────────────────────┘
+
+-
 ```
 
 
@@ -342,20 +346,20 @@ mod sausage_factory {
 
 
 ```
-┌─────────────────────────────────────────┐
-│                                         │
-│  From OUTSIDE:                          │
-│    sausage_factory::make_sausage() ✓    │
+┌──────────────────────────────────────────┐
+│                                          │
+│  From OUTSIDE:                           │
+│    sausage_factory::make_sausage() ✓     │
 │    sausage_factory::get_secret_recipe() ✗│
-│                                         │
-│  From INSIDE:                           │
-│    make_sausage() ✓                     │
-│    get_secret_recipe() ✓                │
-│                                         │
-│  Internal code can use everything.      │
-│  External code only sees pub items.     │
-│                                         │
-└─────────────────────────────────────────┘
+│                                          │ 
+│  From INSIDE:                            │
+│    make_sausage() ✓                      │
+│    get_secret_recipe() ✓                 │
+│                                          │
+│  Internal code can use everything.       │
+│  External code only sees pub items.      │
+│                                          │
+└──────────────────────────────────────────┘
 ```
 
 

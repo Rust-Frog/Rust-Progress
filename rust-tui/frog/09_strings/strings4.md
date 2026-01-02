@@ -508,20 +508,20 @@ placeholder(String::from("hi"));
 
 
 ```
-┌─────────────────────────────────────────┐
-│                                         │
-│  YOUR TASK:                             │
-│                                         │
-│  Replace each placeholder(...) with     │
+┌──────────────────────────────────────────┐
+│                                          │
+│  YOUR TASK:                              │
+│                                          │
+│  Replace each placeholder(...) with      │
 │  either string_slice(...) or string(...) │
-│                                         │
-│  If the expression is &str:             │
-│    → use string_slice()                 │
-│                                         │
-│  If the expression is String:           │
-│    → use string()                       │
-│                                         │
-└─────────────────────────────────────────┘
+│                                          │
+│  If the expression is &str:              │
+│    → use string_slice()                  │
+│                                          │
+│  If the expression is String:            │
+│    → use string()                        │
+│                                          │
+└──────────────────────────────────────────┘
 ```
 
 

@@ -236,21 +236,21 @@ let my_slice = my_string.as_str();
 
 
 ```
-┌─────────────────────────────────────────┐
-│                                         │
+┌──────────────────────────────────────────┐
+│                                          │
 │  &my_string     vs     my_string.as_str()│
-│                                         │
-│  Both give you &str!                    │
-│                                         │
-│  .as_str() is more explicit:            │
-│  "Give me this AS a &str"               │
-│                                         │
-│  & relies on deref coercion:            │
-│  "Borrow this (Rust figures out &str)"  │
-│                                         │
-│  Both are valid. Use what reads best.   │
-│                                         │
-└─────────────────────────────────────────┘
+│                                          │
+│  Both give you &str!                     │
+│                                          │
+│  .as_str() is more explicit:             │
+│  "Give me this AS a &str"                │
+│                                          │
+│  & relies on deref coercion:             │ 
+│  "Borrow this (Rust figures out &str)"   │
+│                                          │
+│  Both are valid. Use what reads best.    │
+│                                          │
+└──────────────────────────────────────────┘
 ```
 
 
@@ -291,6 +291,8 @@ let borrowed = &owned;  // borrowed is &str
 │  All borrowing rules apply!             │
 │                                         │
 └─────────────────────────────────────────┘
+
+-
 ```
 
 
@@ -332,6 +334,8 @@ fn main() {
 │  function parameters - maximum flex!    │
 │                                         │
 └─────────────────────────────────────────┘
+
+-
 ```
 
 
@@ -408,6 +412,8 @@ fn main() {
 │  How do you borrow a String as &str?    │
 │                                         │
 └─────────────────────────────────────────┘
+
+-
 ```
 
 
